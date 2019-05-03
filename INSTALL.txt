@@ -1,0 +1,9 @@
+Execute the files in the following order:
+
+* schema.sql
+* types.sql
+* exploded-interval.sql
+* internal-functions.sql
+* parser.sql
+* public-functions.sql
+* operators.sql
