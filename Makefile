@@ -4,21 +4,29 @@ clean:
 	psql -c "DROP SCHEMA IF EXISTS _rrule CASCADE"
 
 schema:
-	psql -X -f src/schema.sql
+	cat src/schema.sql >> postgres-rrule.sql
 
 types:
-	find src/types -name \*.sql | sort | xargs -L 1 psql -X -f
+	find src/types -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
 
 functions:
-	find src/functions -name \*.sql| sort | xargs -L 1 psql -X -f
+	find src/functions -name \*.sql| sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
 
 operators:
-	find src/operators -name \*.sql | sort | xargs -L 1 psql -X -f
+	find src/operators -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
 
 casts:
-	find src/casts -name \*.sql | sort | xargs -L 1 psql -X -f
+	find src/casts -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
 
 test:
 	psql -c "CREATE EXTENSION IF NOT EXISTS pgtap;" && pg_prove tests/test_*.sql
 
-all: schema types functions operators casts
+rm_rules:
+	rm -f postgres-rrule.sql
+
+compile: rm_rules schema types functions operators casts
+
+execute:
+	psql -X -f postgres-rrule.sql
+
+all: compile execute
