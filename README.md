@@ -16,6 +16,12 @@ Or
   make all
 ```
 
+And modify your search path to include `_rrule` schema:
+
+```
+  SET search_path TO public, _rrule;
+```
+
 ## Testing
 
 Requires `pgTAP` and `pg_resolve`. First let's install those from CPAN.
