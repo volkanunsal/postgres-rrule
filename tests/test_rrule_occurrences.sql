@@ -88,6 +88,7 @@ SELECT results_eq(
   'testYearlyByMonthAndMonthDay'
 );
 
+-- FIXME: need to modify all_starts to make it aware of COUNT.
 SELECT results_eq(
   $$ SELECT * FROM occurrences(
     'RRULE:FREQ=YEARLY;COUNT=3;BYWEEKDAY=TU,TH'::TEXT,
