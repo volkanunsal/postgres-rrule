@@ -9,10 +9,13 @@ CREATE TYPE _rrule.FREQ AS ENUM (
   'YEARLY',
   'MONTHLY',
   'WEEKLY',
-  'DAILY',
-  'HOURLY',
-  'MINUTELY',
-  'SECONDLY'
+  'DAILY'
+
+  -- NOTE: Disabled due to performance concerns.
+
+  -- 'HOURLY',
+  -- 'MINUTELY',
+  -- 'SECONDLY'
 );
 
 
@@ -187,7 +190,7 @@ RETURNS BOOLEAN AS $$
   SELECT _rrule.interval_contains(
     _rrule.build_interval($1),
     _rrule.build_interval($2)
-  ) AND $1."wkst" = $2."wkst";
+  ) AND COALESCE($1."wkst" = $2."wkst", true);
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 
@@ -199,30 +202,91 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _rrule.until("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-
   SELECT min("until")
   FROM (
     SELECT "rrule"."until"
     UNION
-    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * "rrule"."count" AS "until"
+    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * COALESCE("rrule"."count", CASE WHEN "rrule"."until" IS NOT NULL THEN NULL ELSE 1 END) AS "until"
   ) "until" GROUP BY ();
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.until(_rrule.RRULE, TIMESTAMP) IS 'The calculated "until"" timestamp for the given rrule+dtstart';
 
--- STARTS
---
+CREATE OR REPLACE FUNCTION  generate_recurrences(freq _rrule.FREQ, start_date TIMESTAMP,
+end_date TIMESTAMP) RETURNS setof TIMESTAMP AS $$
+  DECLARE
+    next_date TIMESTAMP := start_date;
+    duration  INTERVAL;
+    day       INTERVAL;
+    c         TEXT;
+  BEGIN
+      IF freq = 'WEEKLY' THEN
+        duration := '1 week'::interval;
+        WHILE next_date <= end_date LOOP
+            RETURN NEXT next_date;
+            next_date := next_date + duration;
+        END LOOP;
+      ELSIF freq = 'DAILY' THEN
+        duration := '1 day'::interval;
+        WHILE next_date <= end_date LOOP
+            RETURN NEXT next_date;
+            next_date := next_date + duration;
+        END LOOP;
+      ELSIF freq = 'MONTHLY' THEN
+        duration := '27 days'::interval;
+        day      := '1 day'::interval;
+        c    := to_char(start_date, 'DD');
+        WHILE next_date <= end_date LOOP
+            RETURN NEXT next_date;
+            next_date := next_date + duration;
+            WHILE to_char(next_date, 'DD') <> c LOOP
+                next_date := next_date + day;
+            END LOOP;
+        END LOOP;
+      ELSE
+        RAISE EXCEPTION 'Recurrence % not supported', freq::text USING HINT = 'Please check your recurrence';
+      END IF;
+  END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
+  SELECT CAST(CASE to_char("ts", 'DY')
+    WHEN 'MON' THEN 'MO'
+    WHEN 'TUE' THEN 'TU'
+    WHEN 'WED' THEN 'WE'
+    WHEN 'THU' THEN 'TH'
+    WHEN 'FRI' THEN 'FR'
+    WHEN 'SAT' THEN 'SA'
+    WHEN 'SUN' THEN 'SU'
+  END as _rrule.DAY);
+$$ LANGUAGE SQL IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION num_days(year integer, month integer) RETURNS integer AS $$
+  SELECT DATE_PART('days',
+    DATE_TRUNC('month', make_timestamp(year, month, 1, 1, 1, 1))
+    + '1 MONTH'::INTERVAL
+    - '1 DAY'::INTERVAL
+  )::integer
+$$ LANGUAGE SQL IMMUTABLE;
+
 -- Given a start time, returns a set of all possible start values for a recurrence rule.
 -- For example, a YEARLY rule that repeats on first and third month have 2 start values.
-
--- TODO: If we have a bymonthday, but no bymonth, we need to expand to all months.
--- TODO: If we have a byday, we need to expand to all days of the weeks.
-
 
 CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP
 ) RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  months int[];
+  hour int := EXTRACT(HOUR FROM "dtstart")::integer;
+  minute int := EXTRACT(MINUTE FROM "dtstart")::integer;
+  second double precision := EXTRACT(SECOND FROM "dtstart");
+  day int := EXTRACT(DAY FROM "dtstart")::integer;
+  month int := EXTRACT(MONTH FROM "dtstart")::integer;
+  year int := EXTRACT(YEAR FROM "dtstart")::integer;
+  year_start timestamp := make_timestamp(year, 1, 1, hour, minute, second);
+  year_end timestamp := make_timestamp(year, 12, 31, hour, minute, second);
+  interv INTERVAL := build_interval("rrule");
 BEGIN
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
@@ -230,11 +294,11 @@ BEGIN
     SELECT
       make_timestamp(
         "year"."year",
-        COALESCE("bymonth", EXTRACT(MONTH FROM "dtstart")::integer),
-        COALESCE("bymonthday", EXTRACT(DAY FROM "dtstart")::integer),
-        COALESCE("byhour", EXTRACT(HOUR FROM "dtstart")::integer),
-        COALESCE("byminute", EXTRACT(MINUTE FROM "dtstart")::integer),
-        COALESCE("bysecond", EXTRACT(SECOND FROM "dtstart"))
+        COALESCE("bymonth", month),
+        COALESCE("bymonthday", day),
+        COALESCE("byhour", hour),
+        COALESCE("byminute", minute),
+        COALESCE("bysecond", second)
       ) as "ts"
     FROM "year"
     LEFT OUTER JOIN unnest(("rrule")."bymonth") AS "bymonth" ON (true)
@@ -242,8 +306,50 @@ BEGIN
     LEFT OUTER JOIN unnest(("rrule")."byhour") AS "byhour" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."byminute") AS "byminute" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bysecond") AS "bysecond" ON (true)
+  ),
+  A11 as (
+    SELECT DISTINCT "ts"
+    FROM A10
+    UNION
+    SELECT "ts" FROM (
+      SELECT "ts"
+      FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
+      WHERE (
+        _rrule.to_DAY("ts") = ANY("rrule"."byday")
+      )
+      AND "ts" <= ("dtstart" + INTERVAL '7 days')
+    ) as "ts"
+    UNION
+    SELECT "ts" FROM (
+      SELECT "ts"
+      FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
+      WHERE (
+        EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+      )
+      AND "ts" <= ("dtstart" + INTERVAL '2 months')
+    ) as "ts"
+    UNION
+    SELECT "ts" FROM (
+      SELECT "ts"
+      FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 month') "ts"
+      WHERE (
+        EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
+      )
+    ) as "ts"
   )
-  SELECT "ts" FROM A10;
+  SELECT DISTINCT "ts"
+  FROM A11
+  WHERE (
+    "rrule"."byday" IS NULL OR _rrule.to_DAY("ts") = ANY("rrule"."byday")
+  )
+  AND (
+    "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
+  )
+  AND (
+    "rrule"."bymonthday" IS NULL OR EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+  )
+  ORDER BY "ts";
+
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
@@ -302,7 +408,7 @@ WHERE "freq" IS NOT NULL
 -- FREQ=YEARLY required if BYWEEKNO is provided
 AND ("freq" = 'YEARLY' OR "byweekno" IS NULL)
 -- Limits on FREQ if byyearday is selected
-AND ("freq" IN ('YEARLY', 'HOURLY', 'MINUTELY', 'SECONDLY') OR "byyearday" IS NULL)
+AND ("freq" IN ('YEARLY') OR "byyearday" IS NULL)
 -- FREQ=WEEKLY is invalid when BYMONTHDAY is set
 AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
 -- FREQ=DAILY is invalid when BYDAY is set
@@ -323,7 +429,6 @@ AND (
 -- Either UNTIL or COUNT may appear in a 'recur', but
 -- UNTIL and COUNT MUST NOT occur in the same 'recur'.
 AND ("count" IS NULL OR "until" IS NULL)
-
 AND ("interval" IS NULL OR "interval" > 0);
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
@@ -394,11 +499,12 @@ RETURNS SETOF TIMESTAMP AS $$
     FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
   ),
   "generated" AS (
-    SELECT generate_series("start", COALESCE("until"), "interval") "occurrence"
-    FROM "params" FULL OUTER JOIN "starts" ON (true)
+    SELECT generate_series("start", "until", "interval") "occurrence"
+    FROM "params"
+    FULL OUTER JOIN "starts" ON (true)
   ),
   "ordered" AS (
-    SELECT "occurrence"
+    SELECT DISTINCT "occurrence"
     FROM "generated"
     WHERE "occurrence" >= "dtstart"
     ORDER BY "occurrence"
@@ -411,8 +517,8 @@ RETURNS SETOF TIMESTAMP AS $$
   )
   SELECT "occurrence"
   FROM "tagged"
-  WHERE "row_number" <= ("rrule")."count"
-  OR ("rrule")."count" IS NULL
+  WHERE "row_number" <= "rrule"."count"
+  OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
@@ -468,21 +574,16 @@ RETURNS SETOF TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
-
-
-
-
-
-
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-
-  SELECT "ts"
+BEGIN
+  RETURN (SELECT "ts"
   FROM _rrule.all_starts("rrule", "dtstart") "ts"
-  ORDER BY "ts"
-  LIMIT 1;
-
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+  WHERE "ts" >= "dtstart"
+  ORDER BY "ts" ASC
+  LIMIT 1);
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
@@ -500,9 +601,10 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-  SELECT occurrence
-  FROM _rrule.occurrences("rrule", "dtstart") occurrence
-  ORDER BY occurrence DESC LIMIT 1;
+  SELECT "ts"
+  FROM _rrule.occurrences("rrule", "dtstart") "ts"
+  ORDER BY "ts" DESC
+  LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" TEXT, "dtstart" TIMESTAMP)

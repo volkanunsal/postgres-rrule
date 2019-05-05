@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(6);
+SELECT plan(7);
 
 SET search_path TO public, _rrule;
 
@@ -31,13 +31,12 @@ SELECT is(
   'It''s possible that the first instance will be in the following year.'
 );
 
-
 SELECT is(
   _rrule.first(
-    'RRULE:FREQ=MONTHLY;BYMONTH=1'::TEXT::RRULE,
-    '1997-02-01T00:00:00'::TIMESTAMP
+    'RRULE:FREQ=WEEKLY;BYDAY=MO,WE;'::TEXT::RRULE,
+    '2019-05-05 12:12:54'::TIMESTAMP
   ),
-  '1998-01-01T00:00:00'::TIMESTAMP,
+  '2019-05-06 12:12:54'::TIMESTAMP,
   '"BYDAY" works.'
 );
 

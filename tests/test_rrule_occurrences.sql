@@ -9,28 +9,28 @@ SET search_path TO public, _rrule;
 
 SELECT results_eq(
   $$ SELECT * FROM occurrences(
-    'RRULE:FREQ=YEARLY;COUNT=3'::TEXT,
+    'RRULE:FREQ=WEEKLY;COUNT=3'::TEXT,
     '1997-09-02T09:00:00'::TIMESTAMP
   ) $$,
   $$ VALUES
     ('1997-09-02T09:00:00'::TIMESTAMP),
-    ('1998-09-02T09:00:00'),
-    ('1999-09-02T09:00:00')
+    ('1997-09-09T09:00:00'),
+    ('1997-09-016T09:00:00')
   $$,
-  'testYearly'
+  'testWeekly'
 );
 
 SELECT results_eq(
   $$ SELECT * FROM occurrences(
-    'RRULE:FREQ=YEARLY;COUNT=3;INTERVAL=2'::TEXT,
+    'RRULE:FREQ=MONTHLY;COUNT=3;INTERVAL=2'::TEXT,
     '1997-09-02T09:00:00'::TIMESTAMP
   ) $$,
   $$ VALUES
     ('1997-09-02T09:00:00'::TIMESTAMP),
-    ('1999-09-02T09:00:00'),
-    ('2001-09-02T09:00:00')
+    ('1997-11-02T09:00:00'),
+    ('1998-01-02T09:00:00')
   $$,
-  'testYearlyInterval'
+  'testMonthlyInterval'
 );
 
 
@@ -61,7 +61,6 @@ SELECT results_eq(
 );
 
 
--- FIXME: need to modify all_starts to make it aware of COUNT.
 SELECT results_eq(
   $$ SELECT * FROM occurrences(
     'RRULE:FREQ=YEARLY;COUNT=3;BYMONTHDAY=1,3'::TEXT,
@@ -88,18 +87,18 @@ SELECT results_eq(
   'testYearlyByMonthAndMonthDay'
 );
 
--- FIXME: need to modify all_starts to make it aware of COUNT.
+
 SELECT results_eq(
   $$ SELECT * FROM occurrences(
-    'RRULE:FREQ=YEARLY;COUNT=3;BYWEEKDAY=TU,TH'::TEXT,
-    '1997-03-02T09:00:00'::TIMESTAMP
+    'RRULE:FREQ=WEEKLY;COUNT=3;BYDAY=TU,TH'::TEXT,
+    '2019-05-06T09:00:00'::TIMESTAMP
   )$$,
   $$ VALUES
-    ('1997-09-02T09:00:00'::TIMESTAMP),
-    ('1997-09-04T09:00:00'),
-    ('1997-09-09T09:00:00')
+    ('2019-05-07T09:00:00'::TIMESTAMP),
+    ('2019-05-09T09:00:00'),
+    ('2019-05-14T09:00:00')
   $$,
-  'testYearlyByWeekDay'
+  'testWeeklyByWeekDay'
 );
 
 SELECT * FROM finish();

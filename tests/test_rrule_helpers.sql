@@ -27,7 +27,7 @@ SELECT is(
     '(YEARLY,1,,,,,,,,,,,,MO)'::RRULE,
     '1901-01-01 00:00:00'::TIMESTAMP
   ),
-  NULL::TIMESTAMP,
+  '1902-01-01 00:00:00'::TIMESTAMP,
   'No until or count.'
 );
 
