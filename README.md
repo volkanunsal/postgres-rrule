@@ -7,13 +7,13 @@ Parse RRULE statements, and generate occurrences.
 Execute `postgres-rrule.sql` in your database:
 
 ```
-  psql -X -f postgres-rrule.sql
+  $ psql -X -f postgres-rrule.sql
 ```
 
 Or
 
 ```
-  make all
+  $ make all
 ```
 
 And modify your search path to include `_rrule` schema:

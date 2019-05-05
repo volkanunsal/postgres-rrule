@@ -15,6 +15,8 @@ RETURNS SETOF TIMESTAMP AS $$
     FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
   ),
   "generated" AS (
+    -- FIXME: When "until" is NULL, this returns empty set. It needs to
+    -- go on forever.
     SELECT generate_series("start", "until", "interval") "occurrence"
     FROM "params" FULL OUTER JOIN "starts" ON (true)
   ),

@@ -29,4 +29,8 @@ compile: rm_rules schema types functions operators casts
 execute:
 	psql -X -f postgres-rrule.sql
 
+dev: execute
+
 all: compile execute
+
+

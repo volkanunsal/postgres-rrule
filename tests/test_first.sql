@@ -31,13 +31,23 @@ SELECT is(
   'It''s possible that the first instance will be in the following year.'
 );
 
+
+SELECT is(
+  _rrule.first(
+    'RRULE:FREQ=MONTHLY;BYMONTH=1'::TEXT::RRULE,
+    '1997-02-01T00:00:00'::TIMESTAMP
+  ),
+  '1998-01-01T00:00:00'::TIMESTAMP,
+  '"BYDAY" works.'
+);
+
 SELECT is(
   _rrule.first(
     'RRULE:FREQ=DAILY;BYMONTH=1,2,3;BYMONTHDAY=7,8,9'::TEXT::RRULE,
     '1997-02-14T00:00:00'::TIMESTAMP
   ),
   '1997-03-07T00:00:00'::TIMESTAMP,
-  'Multiple BYMONTH and BYDAY rules work together.'
+  'Multiple BYMONTH and BYMONTHDAY rules work together.'
 );
 
 SELECT is(

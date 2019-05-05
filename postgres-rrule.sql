@@ -61,7 +61,9 @@ CREATE TYPE _rrule.exploded_interval AS (
   "months" INTEGER,
   "days" INTEGER,
   "seconds" INTEGER
-);CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
+);
+
+CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
 RETURNS _rrule.EXPLODED_INTERVAL AS $$
   SELECT
     (
@@ -109,7 +111,9 @@ RETURNS BOOLEAN AS $$
     COALESCE(months = seconds, TRUE)
   FROM factors;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
 RETURNS INTEGER AS $$
     SELECT row_number FROM (
         SELECT (row_number() OVER ())::INTEGER, "value"
@@ -118,6 +122,7 @@ RETURNS INTEGER AS $$
     WHERE "value" = $1;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.enum_index_of(anyenum) IS 'Given an ENUM value, return it''s index.';
+
 CREATE OR REPLACE FUNCTION _rrule.integer_array (TEXT)
 RETURNS integer[] AS $$
   SELECT ('{' || $1 || '}')::integer[];
@@ -143,6 +148,7 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.explode(_rrule.RRULE)
 RETURNS SETOF _rrule.RRULE AS 'SELECT $1' LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.explode (_rrule.RRULE) IS 'Helper function to allow SELECT * FROM explode(rrule)';
+
 CREATE OR REPLACE FUNCTION _rrule.compare_equal(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT count(*) = 1 FROM (
@@ -158,8 +164,11 @@ RETURNS BOOLEAN AS $$
     SELECT * FROM _rrule.explode($1) UNION SELECT * FROM _rrule.explode($2)
   ) AS x;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION _rrule.build_interval("interval" INTEGER, "freq" _rrule.FREQ)
 RETURNS INTERVAL AS $$
+  -- Transform ical time interval enums into Postgres intervals, e.g.
+  -- "WEEKLY" becomes "WEEKS".
   SELECT ("interval" || ' ' || regexp_replace(regexp_replace("freq"::TEXT, 'LY', 'S'), 'IS', 'YS'))::INTERVAL;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
@@ -168,6 +177,7 @@ CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
 RETURNS INTERVAL AS $$
   SELECT _rrule.build_interval($1."interval", $1."freq");
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
 -- rrule containment.
 -- intervals must be compatible.
 -- wkst must match
@@ -185,6 +195,8 @@ CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.contains($2, $1);
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
+
 CREATE OR REPLACE FUNCTION _rrule.until("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 
@@ -197,46 +209,34 @@ RETURNS TIMESTAMP AS $$
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.until(_rrule.RRULE, TIMESTAMP) IS 'The calculated "until"" timestamp for the given rrule+dtstart';
+
 -- STARTS
 --
 -- Given a start time, returns a set of all possible start values for a recurrence rule.
 -- For example, a YEARLY rule that repeats on first and third month have 2 start values.
 
--- NOTE:
--- If we have a bymonthday, but no bymonth, that means we need to expand to all months.
+-- TODO: If we have a bymonthday, but no bymonth, we need to expand to all months.
+-- TODO: If we have a byday, we need to expand to all days of the weeks.
 
--- "bymonth" signals the months to apply the recurrence to. If any of the months
--- in this array is greater than the current month, increment "year" by one because
--- the next occurrence of the month cannot happen in the this year.
-
--- CREATE OR REPLACE FUNCTION _rrule.all_starts(
---   "rrule" _rrule.RRULE,
---   "dtstart" TIMESTAMP
--- ) RETURNS SETOF TIMESTAMP AS $$
--- BEGIN
---   RETURN QUERY EXECUTE format(
---     'SELECT * FROM _rrule.all_starts_%s($1, $2) ORDER BY 1',
---     "rrule".FREQ
---   ) USING "rrule", "dtstart";
--- END;
--- $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP
 ) RETURNS SETOF TIMESTAMP AS $$
 BEGIN
-  RETURN QUERY WITH A10 as (
+  RETURN QUERY WITH
+  "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
+  A10 as (
     SELECT
       make_timestamp(
-        CASE WHEN "bymonth" > EXTRACT(MONTH FROM "dtstart")::integer OR "bymonth" IS NULL THEN "year"."year" ELSE "year"."year" + 1 END,
+        "year"."year",
         COALESCE("bymonth", EXTRACT(MONTH FROM "dtstart")::integer),
         COALESCE("bymonthday", EXTRACT(DAY FROM "dtstart")::integer),
         COALESCE("byhour", EXTRACT(HOUR FROM "dtstart")::integer),
         COALESCE("byminute", EXTRACT(MINUTE FROM "dtstart")::integer),
         COALESCE("bysecond", EXTRACT(SECOND FROM "dtstart"))
       ) as "ts"
-    FROM (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year") AS "year"
+    FROM "year"
     LEFT OUTER JOIN unnest(("rrule")."bymonth") AS "bymonth" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bymonthday") as "bymonthday" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."byhour") AS "byhour" ON (true)
@@ -245,7 +245,9 @@ BEGIN
   )
   SELECT "ts" FROM A10;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 
 WITH "split_into_tokens" AS (
@@ -277,7 +279,6 @@ candidate_rrule AS (
         (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
         (SELECT "val"::_rrule.DAY FROM "split_into_tokens" WHERE "key" = 'WKST') AS "wkst"
 )
-
 SELECT
     "freq",
     -- Default value for INTERVAL
@@ -304,6 +305,8 @@ AND ("freq" = 'YEARLY' OR "byweekno" IS NULL)
 AND ("freq" IN ('YEARLY', 'HOURLY', 'MINUTELY', 'SECONDLY') OR "byyearday" IS NULL)
 -- FREQ=WEEKLY is invalid when BYMONTHDAY is set
 AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
+-- FREQ=DAILY is invalid when BYDAY is set
+AND ("freq" <> 'DAILY' OR "byday" IS NULL)
 -- BY[something-else] is required if BYSETPOS is set.
 AND (
     "bysetpos" IS NULL OR (
@@ -324,6 +327,7 @@ AND ("count" IS NULL OR "until" IS NULL)
 AND ("interval" IS NULL OR "interval" > 0);
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
 CREATE OR REPLACE FUNCTION _rrule.text(_rrule.RRULE)
 RETURNS TEXT AS $$
   SELECT regexp_replace(
@@ -390,7 +394,7 @@ RETURNS SETOF TIMESTAMP AS $$
     FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
   ),
   "generated" AS (
-    SELECT generate_series("start", "until", "interval") "occurrence"
+    SELECT generate_series("start", COALESCE("until"), "interval") "occurrence"
     FROM "params" FULL OUTER JOIN "starts" ON (true)
   ),
   "ordered" AS (
@@ -486,7 +490,7 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
-
+-- HACK: support multiple rules.
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULE)
 RETURNS TIMESTAMP AS $$
   SELECT now()::TIMESTAMP;
@@ -538,7 +542,6 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
-
 
 
 CREATE OR REPLACE FUNCTION _rrule.after(
@@ -601,8 +604,3 @@ CREATE OPERATOR <@ (
 CREATE CAST (TEXT AS _rrule.RRULE)
   WITH FUNCTION _rrule.rrule(TEXT)
   AS IMPLICIT;
-
-
--- CREATE CAST (_rrule.RRULE AS TEXT)
---   WITH FUNCTION _rrule.text(_rrule.RRULE)
---   AS IMPLICIT;
