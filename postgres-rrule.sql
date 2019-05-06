@@ -18,7 +18,6 @@ CREATE TYPE _rrule.FREQ AS ENUM (
   -- 'SECONDLY'
 );
 
-
 CREATE TYPE _rrule.DAY AS ENUM (
   'MO',
   'TU',
@@ -46,7 +45,6 @@ CREATE TABLE _rrule.RRULE (
   "bysetpos" INTEGER[] CHECK(366 >= ALL("bysetpos") AND 0 <> ALL("bysetpos") AND -366 <= ALL("bysetpos")),
   "wkst" _rrule.DAY,
 
-  -- Why?
   CONSTRAINT freq_yearly_if_byweekno CHECK("freq" = 'YEARLY' OR "byweekno" IS NULL)
 );
 
@@ -64,9 +62,7 @@ CREATE TYPE _rrule.exploded_interval AS (
   "months" INTEGER,
   "days" INTEGER,
   "seconds" INTEGER
-);
-
-CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
+);CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
 RETURNS _rrule.EXPLODED_INTERVAL AS $$
   SELECT
     (
@@ -114,9 +110,7 @@ RETURNS BOOLEAN AS $$
     COALESCE(months = seconds, TRUE)
   FROM factors;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;
-
-CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
+$$ LANGUAGE SQL IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
 RETURNS INTEGER AS $$
     SELECT row_number FROM (
         SELECT (row_number() OVER ())::INTEGER, "value"
@@ -125,7 +119,6 @@ RETURNS INTEGER AS $$
     WHERE "value" = $1;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.enum_index_of(anyenum) IS 'Given an ENUM value, return it''s index.';
-
 CREATE OR REPLACE FUNCTION _rrule.integer_array (TEXT)
 RETURNS integer[] AS $$
   SELECT ('{' || $1 || '}')::integer[];
@@ -151,7 +144,6 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.explode(_rrule.RRULE)
 RETURNS SETOF _rrule.RRULE AS 'SELECT $1' LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.explode (_rrule.RRULE) IS 'Helper function to allow SELECT * FROM explode(rrule)';
-
 CREATE OR REPLACE FUNCTION _rrule.compare_equal(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT count(*) = 1 FROM (
@@ -167,7 +159,6 @@ RETURNS BOOLEAN AS $$
     SELECT * FROM _rrule.explode($1) UNION SELECT * FROM _rrule.explode($2)
   ) AS x;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
 CREATE OR REPLACE FUNCTION _rrule.build_interval("interval" INTEGER, "freq" _rrule.FREQ)
 RETURNS INTERVAL AS $$
   -- Transform ical time interval enums into Postgres intervals, e.g.
@@ -180,7 +171,6 @@ CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
 RETURNS INTERVAL AS $$
   SELECT _rrule.build_interval($1."interval", $1."freq");
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
 -- rrule containment.
 -- intervals must be compatible.
 -- wkst must match
@@ -193,13 +183,10 @@ RETURNS BOOLEAN AS $$
   ) AND COALESCE($1."wkst" = $2."wkst", true);
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
-
 CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.contains($2, $1);
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
-
 CREATE OR REPLACE FUNCTION _rrule.until("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT min("until")
@@ -212,42 +199,6 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.until(_rrule.RRULE, TIMESTAMP) IS 'The calculated "until"" timestamp for the given rrule+dtstart';
 
-CREATE OR REPLACE FUNCTION  generate_recurrences(freq _rrule.FREQ, start_date TIMESTAMP,
-end_date TIMESTAMP) RETURNS setof TIMESTAMP AS $$
-  DECLARE
-    next_date TIMESTAMP := start_date;
-    duration  INTERVAL;
-    day       INTERVAL;
-    c         TEXT;
-  BEGIN
-      IF freq = 'WEEKLY' THEN
-        duration := '1 week'::interval;
-        WHILE next_date <= end_date LOOP
-            RETURN NEXT next_date;
-            next_date := next_date + duration;
-        END LOOP;
-      ELSIF freq = 'DAILY' THEN
-        duration := '1 day'::interval;
-        WHILE next_date <= end_date LOOP
-            RETURN NEXT next_date;
-            next_date := next_date + duration;
-        END LOOP;
-      ELSIF freq = 'MONTHLY' THEN
-        duration := '27 days'::interval;
-        day      := '1 day'::interval;
-        c    := to_char(start_date, 'DD');
-        WHILE next_date <= end_date LOOP
-            RETURN NEXT next_date;
-            next_date := next_date + duration;
-            WHILE to_char(next_date, 'DD') <> c LOOP
-                next_date := next_date + day;
-            END LOOP;
-        END LOOP;
-      ELSE
-        RAISE EXCEPTION 'Recurrence % not supported', freq::text USING HINT = 'Please check your recurrence';
-      END IF;
-  END;
-$$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
   SELECT CAST(CASE to_char("ts", 'DY')
@@ -259,14 +210,6 @@ CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $
     WHEN 'SAT' THEN 'SA'
     WHEN 'SUN' THEN 'SU'
   END as _rrule.DAY);
-$$ LANGUAGE SQL IMMUTABLE;
-
-CREATE OR REPLACE FUNCTION num_days(year integer, month integer) RETURNS integer AS $$
-  SELECT DATE_PART('days',
-    DATE_TRUNC('month', make_timestamp(year, month, 1, 1, 1, 1))
-    + '1 MONTH'::INTERVAL
-    - '1 DAY'::INTERVAL
-  )::integer
 $$ LANGUAGE SQL IMMUTABLE;
 
 -- Given a start time, returns a set of all possible start values for a recurrence rule.
@@ -352,7 +295,6 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
-
 CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 
@@ -433,6 +375,7 @@ AND ("interval" IS NULL OR "interval" > 0);
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
+
 CREATE OR REPLACE FUNCTION _rrule.text(_rrule.RRULE)
 RETURNS TEXT AS $$
   SELECT regexp_replace(
@@ -479,6 +422,7 @@ RETURNS BOOLEAN AS $$
   )
   SELECT FALSE;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
+
 
 
 
@@ -573,7 +517,6 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
@@ -598,13 +541,11 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
-
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-  SELECT "ts"
-  FROM _rrule.occurrences("rrule", "dtstart") "ts"
-  ORDER BY "ts" DESC
-  LIMIT 1;
+  SELECT occurrence
+  FROM _rrule.occurrences("rrule", "dtstart") occurrence
+  ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" TEXT, "dtstart" TIMESTAMP)
@@ -644,6 +585,7 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
+
 
 
 CREATE OR REPLACE FUNCTION _rrule.after(
@@ -706,3 +648,8 @@ CREATE OPERATOR <@ (
 CREATE CAST (TEXT AS _rrule.RRULE)
   WITH FUNCTION _rrule.rrule(TEXT)
   AS IMPLICIT;
+
+
+-- CREATE CAST (_rrule.RRULE AS TEXT)
+--   WITH FUNCTION _rrule.text(_rrule.RRULE)
+--   AS IMPLICIT;

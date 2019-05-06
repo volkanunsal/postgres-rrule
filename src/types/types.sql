@@ -2,12 +2,14 @@ CREATE TYPE _rrule.FREQ AS ENUM (
   'YEARLY',
   'MONTHLY',
   'WEEKLY',
-  'DAILY',
-  'HOURLY',
-  'MINUTELY',
-  'SECONDLY'
-);
+  'DAILY'
 
+  -- NOTE: Disabled due to performance concerns.
+
+  -- 'HOURLY',
+  -- 'MINUTELY',
+  -- 'SECONDLY'
+);
 
 CREATE TYPE _rrule.DAY AS ENUM (
   'MO',
@@ -36,7 +38,6 @@ CREATE TABLE _rrule.RRULE (
   "bysetpos" INTEGER[] CHECK(366 >= ALL("bysetpos") AND 0 <> ALL("bysetpos") AND -366 <= ALL("bysetpos")),
   "wkst" _rrule.DAY,
 
-  -- Why?
   CONSTRAINT freq_yearly_if_byweekno CHECK("freq" = 'YEARLY' OR "byweekno" IS NULL)
 );
 

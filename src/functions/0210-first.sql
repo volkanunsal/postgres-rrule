@@ -1,13 +1,13 @@
-
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-
-  SELECT "ts"
+BEGIN
+  RETURN (SELECT "ts"
   FROM _rrule.all_starts("rrule", "dtstart") "ts"
-  ORDER BY "ts"
-  LIMIT 1;
-
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+  WHERE "ts" >= "dtstart"
+  ORDER BY "ts" ASC
+  LIMIT 1);
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
@@ -15,9 +15,8 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
-
+-- HACK: support multiple rules.
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULE)
 RETURNS TIMESTAMP AS $$
   SELECT now()::TIMESTAMP;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
-

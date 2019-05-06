@@ -7,9 +7,8 @@ RETURNS BOOLEAN AS $$
   SELECT _rrule.interval_contains(
     _rrule.build_interval($1),
     _rrule.build_interval($2)
-  ) AND $1."wkst" = $2."wkst";
+  ) AND COALESCE($1."wkst" = $2."wkst", true);
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
 
 CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$

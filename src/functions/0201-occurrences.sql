@@ -1,3 +1,4 @@
+
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP
@@ -15,13 +16,12 @@ RETURNS SETOF TIMESTAMP AS $$
     FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
   ),
   "generated" AS (
-    -- FIXME: When "until" is NULL, this returns empty set. It needs to
-    -- go on forever.
     SELECT generate_series("start", "until", "interval") "occurrence"
-    FROM "params" FULL OUTER JOIN "starts" ON (true)
+    FROM "params"
+    FULL OUTER JOIN "starts" ON (true)
   ),
   "ordered" AS (
-    SELECT "occurrence"
+    SELECT DISTINCT "occurrence"
     FROM "generated"
     WHERE "occurrence" >= "dtstart"
     ORDER BY "occurrence"
@@ -34,8 +34,8 @@ RETURNS SETOF TIMESTAMP AS $$
   )
   SELECT "occurrence"
   FROM "tagged"
-  WHERE "row_number" <= ("rrule")."count"
-  OR ("rrule")."count" IS NULL
+  WHERE "row_number" <= "rrule"."count"
+  OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
@@ -89,10 +89,4 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
-
-
-
-
-
-
 

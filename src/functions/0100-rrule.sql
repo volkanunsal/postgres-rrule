@@ -30,7 +30,6 @@ candidate_rrule AS (
         (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
         (SELECT "val"::_rrule.DAY FROM "split_into_tokens" WHERE "key" = 'WKST') AS "wkst"
 )
-
 SELECT
     "freq",
     -- Default value for INTERVAL
@@ -54,9 +53,11 @@ WHERE "freq" IS NOT NULL
 -- FREQ=YEARLY required if BYWEEKNO is provided
 AND ("freq" = 'YEARLY' OR "byweekno" IS NULL)
 -- Limits on FREQ if byyearday is selected
-AND ("freq" IN ('YEARLY', 'HOURLY', 'MINUTELY', 'SECONDLY') OR "byyearday" IS NULL)
+AND ("freq" IN ('YEARLY') OR "byyearday" IS NULL)
 -- FREQ=WEEKLY is invalid when BYMONTHDAY is set
 AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
+-- FREQ=DAILY is invalid when BYDAY is set
+AND ("freq" <> 'DAILY' OR "byday" IS NULL)
 -- BY[something-else] is required if BYSETPOS is set.
 AND (
     "bysetpos" IS NULL OR (
@@ -73,7 +74,7 @@ AND (
 -- Either UNTIL or COUNT may appear in a 'recur', but
 -- UNTIL and COUNT MUST NOT occur in the same 'recur'.
 AND ("count" IS NULL OR "until" IS NULL)
-
 AND ("interval" IS NULL OR "interval" > 0);
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
