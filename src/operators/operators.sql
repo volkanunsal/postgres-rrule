@@ -28,3 +28,9 @@ CREATE OPERATOR <@ (
   COMMUTATOR = @>
 );
 
+CREATE OPERATOR @> (
+  LEFTARG = _rrule.RRULESET,
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.contains_timestamp
+);
+

@@ -42,12 +42,13 @@ CREATE TABLE _rrule.RRULE (
 );
 
 
-CREATE TABLE _rrule.rruleset (
+CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "rrule" _rrule.RRULE[],
   "exrule" _rrule.RRULE[],
   "rdate" TIMESTAMP[],
-  "exdate" TIMESTAMP[]
+  "exdate" TIMESTAMP[],
+  "timezone" TEXT
 );
 
 

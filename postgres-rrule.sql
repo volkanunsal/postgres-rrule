@@ -49,12 +49,13 @@ CREATE TABLE _rrule.RRULE (
 );
 
 
-CREATE TABLE _rrule.rruleset (
+CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "rrule" _rrule.RRULE[],
   "exrule" _rrule.RRULE[],
   "rdate" TIMESTAMP[],
-  "exdate" TIMESTAMP[]
+  "exdate" TIMESTAMP[],
+  "timezone" TEXT
 );
 
 
@@ -299,51 +300,55 @@ CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 
 WITH "split_into_tokens" AS (
-    SELECT
-        "y"[1] AS "key",
-        "y"[2] AS "val"
-    FROM (
-        SELECT regexp_split_to_array("r", '=') AS "y"
-        FROM regexp_split_to_table(
-            regexp_replace($1::text, '^RRULE:', ''),
-            ';'
-        ) "r"
-    ) "x"
+  SELECT
+    "y"[1] AS "key",
+    "y"[2] AS "val"
+  FROM (
+    SELECT regexp_split_to_array("r", '=') AS "y"
+    FROM regexp_split_to_table(
+      regexp_replace(
+        regexp_replace($1::text, 'DTSTART.*:', ''),
+        'RRULE:',
+        ''
+      ),
+      ';'
+    ) "r"
+  ) "x"
 ),
 candidate_rrule AS (
-    SELECT
-        (SELECT "val"::_rrule.FREQ FROM "split_into_tokens" WHERE "key" = 'FREQ') AS "freq",
-        (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'INTERVAL') AS "interval",
-        (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'COUNT') AS "count",
-        (SELECT "val"::TIMESTAMP FROM "split_into_tokens" WHERE "key" = 'UNTIL') AS "until",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYHOUR') AS "byhour",
-        (SELECT _rrule.day_array("val") FROM "split_into_tokens" WHERE "key" = 'BYDAY') AS "byday",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTHDAY') AS "bymonthday",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYYEARDAY') AS "byyearday",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYWEEKNO') AS "byweekno",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTH') AS "bymonth",
-        (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
-        (SELECT "val"::_rrule.DAY FROM "split_into_tokens" WHERE "key" = 'WKST') AS "wkst"
+  SELECT
+    (SELECT "val"::_rrule.FREQ FROM "split_into_tokens" WHERE "key" = 'FREQ') AS "freq",
+    (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'INTERVAL') AS "interval",
+    (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'COUNT') AS "count",
+    (SELECT "val"::TIMESTAMP FROM "split_into_tokens" WHERE "key" = 'UNTIL') AS "until",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYHOUR') AS "byhour",
+    (SELECT _rrule.day_array("val") FROM "split_into_tokens" WHERE "key" = 'BYDAY') AS "byday",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTHDAY') AS "bymonthday",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYYEARDAY') AS "byyearday",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYWEEKNO') AS "byweekno",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTH') AS "bymonth",
+    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
+    (SELECT "val"::_rrule.DAY FROM "split_into_tokens" WHERE "key" = 'WKST') AS "wkst"
 )
 SELECT
-    "freq",
-    -- Default value for INTERVAL
-    COALESCE("interval", 1) AS "interval",
-    "count",
-    "until",
-    "bysecond",
-    "byminute",
-    "byhour",
-    "byday",
-    "bymonthday",
-    "byyearday",
-    "byweekno",
-    "bymonth",
-    "bysetpos",
-    -- DEFAULT value for wkst
-    COALESCE("wkst", 'MO') AS "wkst"
+  "freq",
+  -- Default value for INTERVAL
+  COALESCE("interval", 1) AS "interval",
+  "count",
+  "until",
+  "bysecond",
+  "byminute",
+  "byhour",
+  "byday",
+  "bymonthday",
+  "byyearday",
+  "byweekno",
+  "bymonth",
+  "bysetpos",
+  -- DEFAULT value for wkst
+  COALESCE("wkst", 'MO') AS "wkst"
 FROM candidate_rrule
 -- FREQ is required
 WHERE "freq" IS NOT NULL
@@ -357,16 +362,16 @@ AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
 AND ("freq" <> 'DAILY' OR "byday" IS NULL)
 -- BY[something-else] is required if BYSETPOS is set.
 AND (
-    "bysetpos" IS NULL OR (
-        "bymonth" IS NOT NULL OR
-        "byweekno" IS NOT NULL OR
-        "byyearday" IS NOT NULL OR
-        "bymonthday" IS NOT NULL OR
-        "byday" IS NOT NULL OR
-        "byhour" IS NOT NULL OR
-        "byminute" IS NOT NULL OR
-        "bysecond" IS NOT NULL
-    )
+  "bysetpos" IS NULL OR (
+    "bymonth" IS NOT NULL OR
+    "byweekno" IS NOT NULL OR
+    "byyearday" IS NOT NULL OR
+    "bymonthday" IS NOT NULL OR
+    "byday" IS NOT NULL OR
+    "byhour" IS NOT NULL OR
+    "byminute" IS NOT NULL OR
+    "bysecond" IS NOT NULL
+  )
 )
 -- Either UNTIL or COUNT may appear in a 'recur', but
 -- UNTIL and COUNT MUST NOT occur in the same 'recur'.
@@ -396,6 +401,36 @@ RETURNS TEXT AS $$
     || CASE WHEN $1."wkst" = 'MO' THEN '' ELSE COALESCE('WKST=' || $1."wkst" || ';', '') END
   , ';$', '');
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
+RETURNS _rrule.RRULESET AS $$
+  WITH "start" AS (
+      SELECT * FROM regexp_split_to_table(
+        regexp_replace(
+          regexp_replace(
+            $1::text,
+            'RRULE:.*',
+            ''
+          ),
+          'DTSTART.*:',
+          ''
+        ),
+        ';'
+      ) "date"
+  ),
+  candidate_rruleset AS (
+      SELECT
+        (SELECT "date"::timestamp FROM "start" LIMIT 1) AS "dtstart"
+  )
+  SELECT
+    "dtstart",
+    ARRAY[_rrule.rrule($1)] "rrule",
+    ARRAY[]::_rrule.RRULE[] "exrule",
+    NULL::TIMESTAMP[] "rdate",
+    NULL::TIMESTAMP[] "exdate",
+    NULL::TEXT "timezone"
+  FROM candidate_rruleset
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+
 -- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
@@ -533,11 +568,11 @@ RETURNS TIMESTAMP AS $$
   SELECT _rrule.first(_rrule.rrule("rrule"), "dtstart");
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
--- HACK: support multiple rules.
-CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULE)
+CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
-  SELECT now()::TIMESTAMP;
+  SELECT occurrence
+  FROM _rrule.occurrences("rruleset") occurrence
+  ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
@@ -615,6 +650,17 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.rruleset, TIMESTAMP)
+RETURNS BOOLEAN AS $$
+DECLARE
+  isEmpty boolean;
+BEGIN
+  SELECT COUNT(*) > 0
+  INTO isEmpty
+  FROM _rrule.after($1, $2);
+  RETURN isEmpty;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (
   LEFTARG = _rrule.RRULE,
   RIGHTARG = _rrule.RRULE,
@@ -645,11 +691,17 @@ CREATE OPERATOR <@ (
   COMMUTATOR = @>
 );
 
+CREATE OPERATOR @> (
+  LEFTARG = _rrule.RRULESET,
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.contains_timestamp
+);
+
 CREATE CAST (TEXT AS _rrule.RRULE)
   WITH FUNCTION _rrule.rrule(TEXT)
   AS IMPLICIT;
 
 
--- CREATE CAST (_rrule.RRULE AS TEXT)
---   WITH FUNCTION _rrule.text(_rrule.RRULE)
---   AS IMPLICIT;
+CREATE CAST (TEXT AS _rrule.RRULESET)
+  WITH FUNCTION _rrule.rruleset(TEXT)
+  AS IMPLICIT;

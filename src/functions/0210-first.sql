@@ -14,9 +14,9 @@ RETURNS TIMESTAMP AS $$
   SELECT _rrule.first(_rrule.rrule("rrule"), "dtstart");
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
--- HACK: support multiple rules.
-CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULE)
+CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
-  SELECT now()::TIMESTAMP;
+  SELECT occurrence
+  FROM _rrule.occurrences("rruleset") occurrence
+  ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;

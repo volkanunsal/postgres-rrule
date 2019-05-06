@@ -3,6 +3,6 @@ CREATE CAST (TEXT AS _rrule.RRULE)
   AS IMPLICIT;
 
 
--- CREATE CAST (_rrule.RRULE AS TEXT)
---   WITH FUNCTION _rrule.text(_rrule.RRULE)
---   AS IMPLICIT;
+CREATE CAST (TEXT AS _rrule.RRULESET)
+  WITH FUNCTION _rrule.rruleset(TEXT)
+  AS IMPLICIT;
