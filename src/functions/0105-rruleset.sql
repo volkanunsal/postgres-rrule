@@ -5,7 +5,7 @@ RETURNS _rrule.RRULESET AS $$
   SELECT
     (SELECT "x"::timestamp FROM "dtstart-line" LIMIT 1) AS "dtstart",
     (SELECT "x"::timestamp FROM "dtend-line" LIMIT 1) AS "dtend",
-    ARRAY[_rrule.rrule($1)] "rrule",
+    ARRAY[_rrule.rrule($1::text)] "rrule",
     ARRAY[]::_rrule.RRULE[] "exrule",
     NULL::TIMESTAMP[] "rdate",
     NULL::TIMESTAMP[] "exdate";
