@@ -753,7 +753,7 @@ $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rrule_to_jsonb("input" _rrule.RRULE)
 RETURNS jsonb AS $$
 BEGIN
-  RETURN jsonb_build_object(
+  RETURN jsonb_strip_nulls(jsonb_build_object(
     'freq', "input"."freq",
     'interval', "input"."interval",
     'count', "input"."count",
@@ -768,7 +768,7 @@ BEGIN
     'bymonth', "input"."bymonth",
     'bysetpos', "input"."bysetpos",
     'wkst', "input"."wkst"
-  );
+  ));
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_to_jsonb("input" _rrule.RRULESET)
@@ -783,14 +783,14 @@ BEGIN
   SELECT _rrule.rrule_to_jsonb("input"."exrule")
   INTO exrule;
 
-  RETURN jsonb_build_object(
+  RETURN jsonb_strip_nulls(jsonb_build_object(
     'dtstart', "input"."dtstart",
     'dtend', "input"."dtend",
     'rrule', rrule,
     'exrule', exrule,
     'rdate', "input"."rdate",
     'exdate', "input"."exdate"
-  );
+  ));
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (

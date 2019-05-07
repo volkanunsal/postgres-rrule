@@ -10,13 +10,13 @@ BEGIN
   SELECT _rrule.rrule_to_jsonb("input"."exrule")
   INTO exrule;
 
-  RETURN jsonb_build_object(
+  RETURN jsonb_strip_nulls(jsonb_build_object(
     'dtstart', "input"."dtstart",
     'dtend', "input"."dtend",
     'rrule', rrule,
     'exrule', exrule,
     'rdate', "input"."rdate",
     'exdate', "input"."exdate"
-  );
+  ));
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
