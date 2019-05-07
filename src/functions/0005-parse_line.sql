@@ -5,7 +5,7 @@ RETURNS SETOF TEXT AS $$
   -- Replace carriage returns with blank space.
   A10 as (SELECT regexp_replace(A5."r", E'[\\n\\r]+',  '', 'g') "r" FROM A5),
   -- Remove marker prefix.
-  A15 as (SELECT regexp_replace(A10."r", marker || '.+:', '') "r" FROM A10),
+  A15 as (SELECT regexp_replace(A10."r", marker || '.*:', '') "r" FROM A10),
   -- Split each key-value pair into a row in a table
   A20 as (SELECT regexp_split_to_table(A15."r", ';') "r" FROM A15)
   -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}

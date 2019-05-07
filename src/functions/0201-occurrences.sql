@@ -63,22 +63,29 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
 RETURNS SETOF TIMESTAMP AS $$
 
   WITH "rrules" AS (
-    SELECT "rruleset"."dtstart", unnest("rruleset"."rrule") AS "rrule"
+    SELECT
+      "rruleset"."dtstart",
+      "rruleset"."dtend",
+      unnest("rruleset"."rrule") AS "rrule"
   ),
   "rdates" AS (
-    SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence" FROM "rrules"
+    SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence"
+    FROM "rrules"
     UNION
     SELECT unnest("rruleset"."rdate") AS "occurrence"
   ),
   "exrules" AS (
-    SELECT "rruleset"."dtstart", unnest("rruleset"."exrule") AS "exrule"
+    SELECT
+      "rruleset"."dtstart",
+      "rruleset"."dtend",
+      unnest("rruleset"."exrule") AS "exrule"
   ),
   "exdates" AS (
-    SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence" FROM "exrules"
+    SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence"
+    FROM "exrules"
     UNION
     SELECT unnest("rruleset"."exdate") AS "occurrence"
   )
-
   SELECT "occurrence" FROM "rdates"
   EXCEPT
   SELECT "occurrence" FROM "exdates";

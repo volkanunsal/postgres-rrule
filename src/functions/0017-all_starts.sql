@@ -1,17 +1,3 @@
-
-CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
-  SELECT CAST(CASE to_char("ts", 'DY')
-    WHEN 'MON' THEN 'MO'
-    WHEN 'TUE' THEN 'TU'
-    WHEN 'WED' THEN 'WE'
-    WHEN 'THU' THEN 'TH'
-    WHEN 'FRI' THEN 'FR'
-    WHEN 'SAT' THEN 'SA'
-    WHEN 'SUN' THEN 'SU'
-  END as _rrule.DAY);
-$$ LANGUAGE SQL IMMUTABLE;
-
--- Given a start time, returns a set of all possible start values for a recurrence rule.
 -- For example, a YEARLY rule that repeats on first and third month have 2 start values.
 
 CREATE OR REPLACE FUNCTION _rrule.all_starts(
@@ -57,7 +43,7 @@ BEGIN
       SELECT "ts"
       FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
       WHERE (
-        _rrule.to_DAY("ts") = ANY("rrule"."byday")
+        "ts"::DAY = ANY("rrule"."byday")
       )
       AND "ts" <= ("dtstart" + INTERVAL '7 days')
     ) as "ts"
@@ -82,7 +68,7 @@ BEGIN
   SELECT DISTINCT "ts"
   FROM A11
   WHERE (
-    "rrule"."byday" IS NULL OR _rrule.to_DAY("ts") = ANY("rrule"."byday")
+    "rrule"."byday" IS NULL OR "ts"::DAY = ANY("rrule"."byday")
   )
   AND (
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
