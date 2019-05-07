@@ -22,25 +22,6 @@ And modify your search path to include `_rrule` schema:
   SET search_path TO public, _rrule;
 ```
 
-## Testing
-
-Requires `pgTAP` and `pg_resolve`. First let's install those from CPAN.
-
-```
-  $ sudo cpan TAP::Parser::SourceHandler::pgTAP
-```
-
-Now you can run the tests with
-
-```
-  $ make all test
-```
-
-
-## Contribute
-
-This repo is a fork of Matthew Schinckel's [original repo](https://bitbucket.org/schinckel/postgres-rrule). I have cleaned up some functions and fixed a few tests. There are still a few broken tests that I couldn't fix. If you can lend a help, please create an issue on this repo.
-
 ## How it works
 
 We create a table (in a newly created `_rrule` schema) called `RRULE` to generate start dates from rule criteria. The table constraints enforce the validity of dates in the table.
@@ -65,6 +46,25 @@ All of the types and functions are created in that schema.
 ### Functions
 
 In the case of the `rrule` functions, there is a second required argument of type `timestamp`, which is the `"dtstart"` argument of a `rruleset`. There is a form for each `rrule`-accepting function that accepts a `text` value, and parses it.
+
+
+## Testing
+
+Requires `pgTAP` and `pg_resolve`. First let's install those from CPAN.
+
+```
+  $ sudo cpan TAP::Parser::SourceHandler::pgTAP
+```
+
+Now you can run the tests with
+
+```
+  $ make all test
+```
+
+## Prior Art
+
+This is a fork of Matthew Schinckel's [original repo](https://bitbucket.org/schinckel/postgres-rrule).
 
 
 ## License
