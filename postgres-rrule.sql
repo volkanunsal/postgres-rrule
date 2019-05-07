@@ -320,9 +320,6 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
-  -- TODO: add validation rules
-
-
   WITH "tokens" AS (
     WITH A20 as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
     -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}

@@ -57,7 +57,7 @@ SELECT results_eq(
   'Monthly BYMONTH with one value -> one start.'
 );
 
--- -- 'WEEKLY COUNT=1.'
+-- 'WEEKLY COUNT=1.'
 SELECT results_eq(
   $$ SELECT _rrule.all_starts(
     'RRULE:FREQ=WEEKLY;COUNT=1'::TEXT::RRULE,
@@ -67,7 +67,7 @@ SELECT results_eq(
   'WEEKLY COUNT=1.'
 );
 
--- -- 'DAILY COUNT=1.'
+-- 'DAILY COUNT=1.'
 SELECT results_eq(
   $$ SELECT _rrule.all_starts(
     'RRULE:FREQ=DAILY;COUNT=1'::TEXT::RRULE,
