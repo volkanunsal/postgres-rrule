@@ -66,7 +66,7 @@ RETURNS SETOF TIMESTAMP AS $$
     SELECT
       "rruleset"."dtstart",
       "rruleset"."dtend",
-      unnest("rruleset"."rrule") AS "rrule"
+      "rruleset"."rrule"
   ),
   "rdates" AS (
     SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence"
@@ -78,7 +78,7 @@ RETURNS SETOF TIMESTAMP AS $$
     SELECT
       "rruleset"."dtstart",
       "rruleset"."dtend",
-      unnest("rruleset"."exrule") AS "exrule"
+      "rruleset"."exrule"
   ),
   "exdates" AS (
     SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence"

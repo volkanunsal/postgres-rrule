@@ -45,8 +45,8 @@ CREATE TABLE _rrule.RRULE (
 CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "dtend" TIMESTAMP,
-  "rrule" _rrule.RRULE[],
-  "exrule" _rrule.RRULE[],
+  "rrule" _rrule.RRULE,
+  "exrule" _rrule.RRULE,
   "rdate" TIMESTAMP[],
   "exdate" TIMESTAMP[]
 );

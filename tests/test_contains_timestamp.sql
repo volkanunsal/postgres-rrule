@@ -25,7 +25,7 @@ SELECT is(
     '19980603T090000'::timestamp
   ),
   false,
-  'when timestamp is contained by ruleset.'
+  'when timestamp is NOT contained by ruleset.'
 );
 
 SELECT * FROM finish();

@@ -15,14 +15,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  -- All non-finite rrule objects have a counterpart in exrules that
-  -- matches interval/frequency (or is a multiple of same).
-  WITH non_finite AS (
-    SELECT "rrule"
-    FROM unnest("rruleset"."rrule") "rrule"
-    WHERE NOT _rrule.is_finite("rrule")
-  )
-  SELECT FALSE;
+  SELECT _rrule.is_finite("rruleset"."rrule"::text::_rrule.RRULE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 

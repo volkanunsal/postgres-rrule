@@ -52,8 +52,8 @@ CREATE TABLE _rrule.RRULE (
 CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "dtend" TIMESTAMP,
-  "rrule" _rrule.RRULE[],
-  "exrule" _rrule.RRULE[],
+  "rrule" _rrule.RRULE,
+  "exrule" _rrule.RRULE,
   "rdate" TIMESTAMP[],
   "exdate" TIMESTAMP[]
 );
@@ -430,12 +430,13 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
   WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),
-  "dtend-line" AS (SELECT _rrule.parse_line($1::text, 'DTEND') as "x")
+  "dtend-line" AS (SELECT _rrule.parse_line($1::text, 'DTEND') as "x"),
+  "exrule-line" AS (SELECT _rrule.parse_line($1::text, 'EXRULE') as "x")
   SELECT
     (SELECT "x"::timestamp FROM "dtstart-line" LIMIT 1) AS "dtstart",
     (SELECT "x"::timestamp FROM "dtend-line" LIMIT 1) AS "dtend",
-    ARRAY[_rrule.rrule($1::text)] "rrule",
-    ARRAY[]::_rrule.RRULE[] "exrule",
+    (SELECT _rrule.rrule($1::text) "rrule") as "rrule",
+    (SELECT _rrule.rrule("x"::text) "rrule" FROM "exrule-line") as "exrule",
     NULL::TIMESTAMP[] "rdate",
     NULL::TIMESTAMP[] "exdate";
 $$ LANGUAGE SQL IMMUTABLE STRICT;
@@ -457,14 +458,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  -- All non-finite rrule objects have a counterpart in exrules that
-  -- matches interval/frequency (or is a multiple of same).
-  WITH non_finite AS (
-    SELECT "rrule"
-    FROM unnest("rruleset"."rrule") "rrule"
-    WHERE NOT _rrule.is_finite("rrule")
-  )
-  SELECT FALSE;
+  SELECT _rrule.is_finite("rruleset"."rrule"::text::_rrule.RRULE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
@@ -537,7 +531,7 @@ RETURNS SETOF TIMESTAMP AS $$
     SELECT
       "rruleset"."dtstart",
       "rruleset"."dtend",
-      unnest("rruleset"."rrule") AS "rrule"
+      "rruleset"."rrule"
   ),
   "rdates" AS (
     SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence"
@@ -549,7 +543,7 @@ RETURNS SETOF TIMESTAMP AS $$
     SELECT
       "rruleset"."dtstart",
       "rruleset"."dtend",
-      unnest("rruleset"."exrule") AS "exrule"
+      "rruleset"."exrule"
   ),
   "exdates" AS (
     SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence"
