@@ -1,8 +1,6 @@
 BEGIN;
 
-
-
-SELECT plan(9);
+SELECT plan(11);
 
 SET search_path TO _rrule, public;
 
@@ -26,41 +24,62 @@ SELECT is(
     'Daily, until Xmas eve 1997'
 );
 
-SELECT is(
-    rrule(''),
-    NULL,
-    'Empty string parses as NULL'
+PREPARE my_thrower AS SELECT rrule('');
+SELECT throws_like(
+    'my_thrower',
+    'FREQ cannot be null',
+    'Empty string raises exception.'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=MONTHLY;BYWEEKNO=1'),
-    NULL,
+PREPARE my_thrower2 AS SELECT rrule('RRULE:FREQ=MONTHLY;BYWEEKNO=1');
+SELECT throws_like(
+    'my_thrower2',
+    'FREQ must be YEARLY if BYWEEKNO is provided.',
     'BYWEEKNO is only valid with FREQ=YEARLY'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=DAILY;BYYEARDAY=22'),
-    NULL,
-    'BYYEARDAY is only valid with FREQ in (YEARLY, SECONDLY, MINUTELY, HOURLY)'
+PREPARE my_thrower3 AS SELECT rrule('RRULE:FREQ=DAILY;BYYEARDAY=22');
+SELECT throws_like(
+    'my_thrower3',
+    'BYYEARDAY is only valid when FREQ is YEARLY.',
+    'BYYEARDAY is only valid when FREQ is YEARLY.'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=DAILY;BYSETPOS=1'),
-    NULL,
+PREPARE my_thrower4 AS SELECT rrule('RRULE:FREQ=WEEKLY;BYMONTHDAY=1');
+SELECT throws_like(
+    'my_thrower4',
+    'BYMONTHDAY is not valid when FREQ is WEEKLY.',
+    'BYMONTHDAY is not valid when FREQ is WEEKLY.'
+);
+
+PREPARE my_thrower5 AS SELECT rrule('RRULE:FREQ=DAILY;BYSETPOS=1');
+SELECT throws_like(
+    'my_thrower5',
+    'BYSETPOS requires at least one other BY*',
     'BYSETPOS requires at least one other BY*'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=DAILY;BYSETPOS=1;BYMONTH=1'),
-    '(DAILY,1,,,,,,,,,,{1},{1},MO)',
-    'BYSETPOS requires at least one other BY*'
+PREPARE my_thrower6 AS SELECT rrule('RRULE:FREQ=DAILY;BYDAY=TU');
+SELECT throws_like(
+    'my_thrower6',
+    'BYDAY is not valid when FREQ is DAILY.',
+    'BYDAY is not valid when FREQ is DAILY.'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=WEEKLY;BYMONTHDAY=1'),
-    NULL,
-    'BYMONTHDAY is not valid with FREQ=WEEKLY'
+PREPARE my_thrower7 AS SELECT rrule('RRULE:FREQ=DAILY;UNTIL=19971224T000000;COUNT=3');
+SELECT throws_like(
+    'my_thrower7',
+    'UNTIL and COUNT MUST NOT occur in the same recurrence.',
+    'UNTIL and COUNT MUST NOT occur in the same recurrence.'
 );
+
+PREPARE my_thrower8 AS SELECT rrule('RRULE:FREQ=DAILY;INTERVAL=-1');
+SELECT throws_like(
+    'my_thrower8',
+    'INTERVAL must be a non-zero integer.',
+    'INTERVAL must be a non-zero integer.'
+);
+
 
 SELECT * FROM finish();
 

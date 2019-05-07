@@ -44,34 +44,46 @@ BEGIN
     -- DEFAULT value for wkst
     COALESCE("wkst", 'MO') AS "wkst"
   INTO result
-  FROM candidate
+  FROM candidate;
+
   -- FREQ is required
-  WHERE "freq" IS NOT NULL
+  IF result."freq" IS NULL THEN
+    RAISE EXCEPTION 'FREQ cannot be null';
+  END IF;
+
   -- FREQ=YEARLY required if BYWEEKNO is provided
-  AND ("freq" = 'YEARLY' OR "byweekno" IS NULL)
+  IF result."byweekno" IS NOT NULL AND result."freq" != 'YEARLY' THEN
+    RAISE EXCEPTION 'FREQ must be YEARLY if BYWEEKNO is provided.';
+  END IF;
+
   -- Limits on FREQ if byyearday is selected
-  AND ("freq" IN ('YEARLY') OR "byyearday" IS NULL)
-  -- FREQ=WEEKLY is invalid when BYMONTHDAY is set
-  AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
-  -- FREQ=DAILY is invalid when BYDAY is set
-  AND ("freq" <> 'DAILY' OR "byday" IS NULL)
+  IF (result."freq" <> 'YEARLY' AND result."byyearday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYYEARDAY is only valid when FREQ is YEARLY.';
+  END IF;
+
+  IF (result."freq" = 'WEEKLY' AND result."bymonthday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYMONTHDAY is not valid when FREQ is WEEKLY.';
+  END IF;
+
   -- BY[something-else] is required if BYSETPOS is set.
-  AND (
-    "bysetpos" IS NULL OR (
-      "bymonth" IS NOT NULL OR
-      "byweekno" IS NOT NULL OR
-      "byyearday" IS NOT NULL OR
-      "bymonthday" IS NOT NULL OR
-      "byday" IS NOT NULL OR
-      "byhour" IS NOT NULL OR
-      "byminute" IS NOT NULL OR
-      "bysecond" IS NOT NULL
-    )
-  )
-  -- Either UNTIL or COUNT may appear in a 'recur', but
-  -- UNTIL and COUNT MUST NOT occur in the same 'recur'.
-  AND ("count" IS NULL OR "until" IS NULL)
-  AND ("interval" IS NULL OR "interval" > 0);
+  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
+    RAISE EXCEPTION 'BYSETPOS requires at least one other BY*';
+  END IF;
+
+  IF result."freq" = 'DAILY' AND result."byday" IS NOT NULL THEN
+    RAISE EXCEPTION 'BYDAY is not valid when FREQ is DAILY.';
+  END IF;
+
+  IF result."until" IS NOT NULL AND result."count" IS NOT NULL THEN
+    RAISE EXCEPTION 'UNTIL and COUNT MUST NOT occur in the same recurrence.';
+  END IF;
+
+  IF result."interval" IS NOT NULL THEN
+    IF (NOT result."interval" > 0) THEN
+      RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
+    END IF;
+  END IF;
+
 
   RETURN result;
 END;

@@ -88,7 +88,8 @@ RETURNS SETOF TIMESTAMP AS $$
   )
   SELECT "occurrence" FROM "rdates"
   EXCEPT
-  SELECT "occurrence" FROM "exdates";
+  SELECT "occurrence" FROM "exdates"
+  ORDER BY "occurrence";
 
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 

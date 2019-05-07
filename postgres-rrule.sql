@@ -130,26 +130,6 @@ RETURNS SETOF TEXT AS $$
   FROM A20
   WHERE "r" != '';
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
--- CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
--- RETURNS SETOF TEXT AS $$
---   -- Clear spaces at the front of the lines
---   WITH A4 as (SELECT regexp_replace(input, '^\s*',  '', 'ng') "r"),
---   -- Clear all lines except the ones starting with marker
---   A5 as (SELECT regexp_replace(A4."r", '^(?!' || marker || ').*?$',  '', 'ng') "r"),
---   -- Replace carriage returns with blank space.
---   A10 as (SELECT regexp_replace(A5."r", E'[\\n\\r]+',  '', 'g') "r" FROM A5),
---   -- Remove marker prefix.
---   A15 as (SELECT regexp_replace(A10."r", marker || ':(.*)$', '\1') "r" FROM A10),
---   -- Trim
---   A17 as (SELECT trim(A15."r") "r" FROM A15),
---   -- Split each key-value pair into a row in a table
---   A20 as (SELECT regexp_split_to_table(A17."r", ';') "r" FROM A17)
---   -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}
---   SELECT "r" AS "y"
---   FROM A20
---   WHERE "r" != '';
--- $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
   SELECT CAST(CASE to_char("ts", 'DY')
     WHEN 'MON' THEN 'MO'
@@ -340,6 +320,9 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
+  -- TODO: add validation rules
+
+
   WITH "tokens" AS (
     WITH A20 as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
     -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}
@@ -381,34 +364,46 @@ BEGIN
     -- DEFAULT value for wkst
     COALESCE("wkst", 'MO') AS "wkst"
   INTO result
-  FROM candidate
+  FROM candidate;
+
   -- FREQ is required
-  WHERE "freq" IS NOT NULL
+  IF result."freq" IS NULL THEN
+    RAISE EXCEPTION 'FREQ cannot be null';
+  END IF;
+
   -- FREQ=YEARLY required if BYWEEKNO is provided
-  AND ("freq" = 'YEARLY' OR "byweekno" IS NULL)
+  IF result."byweekno" IS NOT NULL AND result."freq" != 'YEARLY' THEN
+    RAISE EXCEPTION 'FREQ must be YEARLY if BYWEEKNO is provided.';
+  END IF;
+
   -- Limits on FREQ if byyearday is selected
-  AND ("freq" IN ('YEARLY') OR "byyearday" IS NULL)
-  -- FREQ=WEEKLY is invalid when BYMONTHDAY is set
-  AND ("freq" <> 'WEEKLY' OR "bymonthday" IS NULL)
-  -- FREQ=DAILY is invalid when BYDAY is set
-  AND ("freq" <> 'DAILY' OR "byday" IS NULL)
+  IF (result."freq" <> 'YEARLY' AND result."byyearday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYYEARDAY is only valid when FREQ is YEARLY.';
+  END IF;
+
+  IF (result."freq" = 'WEEKLY' AND result."bymonthday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYMONTHDAY is not valid when FREQ is WEEKLY.';
+  END IF;
+
   -- BY[something-else] is required if BYSETPOS is set.
-  AND (
-    "bysetpos" IS NULL OR (
-      "bymonth" IS NOT NULL OR
-      "byweekno" IS NOT NULL OR
-      "byyearday" IS NOT NULL OR
-      "bymonthday" IS NOT NULL OR
-      "byday" IS NOT NULL OR
-      "byhour" IS NOT NULL OR
-      "byminute" IS NOT NULL OR
-      "bysecond" IS NOT NULL
-    )
-  )
-  -- Either UNTIL or COUNT may appear in a 'recur', but
-  -- UNTIL and COUNT MUST NOT occur in the same 'recur'.
-  AND ("count" IS NULL OR "until" IS NULL)
-  AND ("interval" IS NULL OR "interval" > 0);
+  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
+    RAISE EXCEPTION 'BYSETPOS requires at least one other BY*';
+  END IF;
+
+  IF result."freq" = 'DAILY' AND result."byday" IS NOT NULL THEN
+    RAISE EXCEPTION 'BYDAY is not valid when FREQ is DAILY.';
+  END IF;
+
+  IF result."until" IS NOT NULL AND result."count" IS NOT NULL THEN
+    RAISE EXCEPTION 'UNTIL and COUNT MUST NOT occur in the same recurrence.';
+  END IF;
+
+  IF result."interval" IS NOT NULL THEN
+    IF (NOT result."interval" > 0) THEN
+      RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
+    END IF;
+  END IF;
+
 
   RETURN result;
 END;
@@ -567,7 +562,8 @@ RETURNS SETOF TIMESTAMP AS $$
   )
   SELECT "occurrence" FROM "rdates"
   EXCEPT
-  SELECT "occurrence" FROM "exdates";
+  SELECT "occurrence" FROM "exdates"
+  ORDER BY "occurrence";
 
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
@@ -681,7 +677,9 @@ DECLARE
 BEGIN
   SELECT COUNT(*) > 0
   INTO isEmpty
-  FROM _rrule.after($1, $2);
+  FROM _rrule.after($1, $2 - INTERVAL '1 month') "ts"
+  WHERE "ts"::date = $2::date;
+
   RETURN isEmpty;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
@@ -729,3 +727,4 @@ CREATE CAST (TEXT AS _rrule.RRULE)
 CREATE CAST (TEXT AS _rrule.RRULESET)
   WITH FUNCTION _rrule.rruleset(TEXT)
   AS IMPLICIT;
+  
