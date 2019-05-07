@@ -17,3 +17,12 @@ CREATE CAST (jsonb AS _rrule.RRULE)
   WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
   AS IMPLICIT;
 
+
+CREATE CAST (_rrule.RRULE AS jsonb)
+  WITH FUNCTION _rrule.rrule_to_jsonb(_rrule.RRULE)
+  AS IMPLICIT;
+
+
+-- CREATE CAST (_rrule.RRULESET AS jsonb)
+--   WITH FUNCTION _rrule.rruleset_to_jsonb(_rrule.RRULESET)
+--   AS IMPLICIT;

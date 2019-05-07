@@ -750,6 +750,49 @@ BEGIN
   RETURN result;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rrule_to_jsonb("input" _rrule.RRULE)
+RETURNS jsonb AS $$
+BEGIN
+  RETURN jsonb_build_object(
+    'freq', "input"."freq",
+    'interval', "input"."interval",
+    'count', "input"."count",
+    'until', "input"."until",
+    'bysecond', "input"."bysecond",
+    'byminute', "input"."byminute",
+    'byhour', "input"."byhour",
+    'byday', "input"."byday",
+    'bymonthday', "input"."bymonthday",
+    'byyearday', "input"."byyearday",
+    'byweekno', "input"."byweekno",
+    'bymonth', "input"."bymonth",
+    'bysetpos', "input"."bysetpos",
+    'wkst', "input"."wkst"
+  );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_to_jsonb("input" _rrule.RRULESET)
+RETURNS jsonb AS $$
+DECLARE
+  rrule jsonb;
+  exrule jsonb;
+BEGIN
+  SELECT _rrule.rrule_to_jsonb("input"."rrule")
+  INTO rrule;
+
+  SELECT _rrule.rrule_to_jsonb("input"."exrule")
+  INTO exrule;
+
+  RETURN jsonb_build_object(
+    'dtstart', "input"."dtstart",
+    'dtend', "input"."dtend",
+    'rrule', rrule,
+    'exrule', exrule,
+    'rdate', "input"."rdate",
+    'exdate', "input"."exdate"
+  );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (
   LEFTARG = _rrule.RRULE,
   RIGHTARG = _rrule.RRULE,
@@ -805,3 +848,12 @@ CREATE CAST (jsonb AS _rrule.RRULE)
   WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
   AS IMPLICIT;
 
+
+CREATE CAST (_rrule.RRULE AS jsonb)
+  WITH FUNCTION _rrule.rrule_to_jsonb(_rrule.RRULE)
+  AS IMPLICIT;
+
+
+-- CREATE CAST (_rrule.RRULESET AS jsonb)
+--   WITH FUNCTION _rrule.rruleset_to_jsonb(_rrule.RRULESET)
+--   AS IMPLICIT;
