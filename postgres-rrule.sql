@@ -315,7 +315,48 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
-CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
+CREATE OR REPLACE FUNCTION _rrule.validate_rrule (result _rrule.RRULE)
+RETURNS void AS $$
+BEGIN
+  -- FREQ is required
+  IF result."freq" IS NULL THEN
+    RAISE EXCEPTION 'FREQ cannot be null';
+  END IF;
+
+  -- FREQ=YEARLY required if BYWEEKNO is provided
+  IF result."byweekno" IS NOT NULL AND result."freq" != 'YEARLY' THEN
+    RAISE EXCEPTION 'FREQ must be YEARLY if BYWEEKNO is provided.';
+  END IF;
+
+  -- Limits on FREQ if byyearday is selected
+  IF (result."freq" <> 'YEARLY' AND result."byyearday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYYEARDAY is only valid when FREQ is YEARLY.';
+  END IF;
+
+  IF (result."freq" = 'WEEKLY' AND result."bymonthday" IS NOT NULL) THEN
+    RAISE EXCEPTION 'BYMONTHDAY is not valid when FREQ is WEEKLY.';
+  END IF;
+
+  -- BY[something-else] is required if BYSETPOS is set.
+  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
+    RAISE EXCEPTION 'BYSETPOS requires at least one other BY*';
+  END IF;
+
+  IF result."freq" = 'DAILY' AND result."byday" IS NOT NULL THEN
+    RAISE EXCEPTION 'BYDAY is not valid when FREQ is DAILY.';
+  END IF;
+
+  IF result."until" IS NOT NULL AND result."count" IS NOT NULL THEN
+    RAISE EXCEPTION 'UNTIL and COUNT MUST NOT occur in the same recurrence.';
+  END IF;
+
+  IF result."interval" IS NOT NULL THEN
+    IF (NOT result."interval" > 0) THEN
+      RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
+    END IF;
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
@@ -363,44 +404,7 @@ BEGIN
   INTO result
   FROM candidate;
 
-  -- FREQ is required
-  IF result."freq" IS NULL THEN
-    RAISE EXCEPTION 'FREQ cannot be null';
-  END IF;
-
-  -- FREQ=YEARLY required if BYWEEKNO is provided
-  IF result."byweekno" IS NOT NULL AND result."freq" != 'YEARLY' THEN
-    RAISE EXCEPTION 'FREQ must be YEARLY if BYWEEKNO is provided.';
-  END IF;
-
-  -- Limits on FREQ if byyearday is selected
-  IF (result."freq" <> 'YEARLY' AND result."byyearday" IS NOT NULL) THEN
-    RAISE EXCEPTION 'BYYEARDAY is only valid when FREQ is YEARLY.';
-  END IF;
-
-  IF (result."freq" = 'WEEKLY' AND result."bymonthday" IS NOT NULL) THEN
-    RAISE EXCEPTION 'BYMONTHDAY is not valid when FREQ is WEEKLY.';
-  END IF;
-
-  -- BY[something-else] is required if BYSETPOS is set.
-  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
-    RAISE EXCEPTION 'BYSETPOS requires at least one other BY*';
-  END IF;
-
-  IF result."freq" = 'DAILY' AND result."byday" IS NOT NULL THEN
-    RAISE EXCEPTION 'BYDAY is not valid when FREQ is DAILY.';
-  END IF;
-
-  IF result."until" IS NOT NULL AND result."count" IS NOT NULL THEN
-    RAISE EXCEPTION 'UNTIL and COUNT MUST NOT occur in the same recurrence.';
-  END IF;
-
-  IF result."interval" IS NOT NULL THEN
-    IF (NOT result."interval" > 0) THEN
-      RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
-    END IF;
-  END IF;
-
+  PERFORM _rrule.validate_rrule(result);
 
   RETURN result;
 END;
@@ -674,6 +678,78 @@ BEGIN
   RETURN isEmpty;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rrule("input" jsonb)
+RETURNS _rrule.RRULE AS $$
+DECLARE
+  result _rrule.RRULE;
+BEGIN
+  SELECT
+    "freq",
+    -- Default value for INTERVAL
+    COALESCE("interval", 1) AS "interval",
+    "count",
+    "until",
+    "bysecond",
+    "byminute",
+    "byhour",
+    "byday",
+    "bymonthday",
+    "byyearday",
+    "byweekno",
+    "bymonth",
+    "bysetpos",
+    -- DEFAULT value for wkst
+    COALESCE("wkst", 'MO') AS "wkst"
+  INTO result
+  FROM jsonb_to_record("input") as x(
+    "freq" _rrule.FREQ,
+    "interval" integer,
+    "count" INTEGER,
+    "until" text,
+    "bysecond" integer[],
+    "byminute" integer[],
+    "byhour" integer[],
+    "byday" integer[],
+    "bymonthday" integer[],
+    "byyearday" integer[],
+    "byweekno" integer[],
+    "bymonth" integer[],
+    "bysetpos" integer[],
+    "wkst" _rrule.DAY
+  );
+
+  PERFORM _rrule.validate_rrule(result);
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
+RETURNS _rrule.RRULESET AS $$
+DECLARE
+  result _rrule.RRULESET;
+BEGIN
+  SELECT
+    "dtstart"::TIMESTAMP,
+    "dtend"::TIMESTAMP,
+    jsonb_to_rrule("rrule") "rrule",
+    jsonb_to_rrule("exrule") "exrule",
+    "rdate"::TIMESTAMP[],
+    "exdate"::TIMESTAMP[]
+  INTO result
+  FROM jsonb_to_record("input") as x(
+    "dtstart" text,
+    "dtend" text,
+    "rrule" jsonb,
+    "exrule" jsonb,
+    "rdate" text[],
+    "exdate" text[]
+  );
+
+  -- TODO: validate rruleset
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (
   LEFTARG = _rrule.RRULE,
   RIGHTARG = _rrule.RRULE,
@@ -718,4 +794,14 @@ CREATE CAST (TEXT AS _rrule.RRULE)
 CREATE CAST (TEXT AS _rrule.RRULESET)
   WITH FUNCTION _rrule.rruleset(TEXT)
   AS IMPLICIT;
-  
+
+
+CREATE CAST (jsonb AS _rrule.RRULESET)
+  WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
+  AS IMPLICIT;
+
+
+CREATE CAST (jsonb AS _rrule.RRULE)
+  WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
+  AS IMPLICIT;
+

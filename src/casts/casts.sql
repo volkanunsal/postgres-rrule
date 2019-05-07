@@ -6,4 +6,14 @@ CREATE CAST (TEXT AS _rrule.RRULE)
 CREATE CAST (TEXT AS _rrule.RRULESET)
   WITH FUNCTION _rrule.rruleset(TEXT)
   AS IMPLICIT;
-  
+
+
+CREATE CAST (jsonb AS _rrule.RRULESET)
+  WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
+  AS IMPLICIT;
+
+
+CREATE CAST (jsonb AS _rrule.RRULE)
+  WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
+  AS IMPLICIT;
+
