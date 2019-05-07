@@ -1,30 +1,12 @@
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
-  WITH "start" AS (
-      SELECT * FROM regexp_split_to_table(
-        regexp_replace(
-          regexp_replace(
-            $1::text,
-            'RRULE:.*',
-            ''
-          ),
-          'DTSTART.*:',
-          ''
-        ),
-        ';'
-      ) "date"
-  ),
-  candidate_rruleset AS (
-      SELECT
-        (SELECT "date"::timestamp FROM "start" LIMIT 1) AS "dtstart"
-  )
+  WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x")
   SELECT
-    "dtstart",
+    (SELECT "x"::timestamp FROM "dtstart-line" LIMIT 1) AS "dtstart",
     ARRAY[_rrule.rrule($1)] "rrule",
     ARRAY[]::_rrule.RRULE[] "exrule",
     NULL::TIMESTAMP[] "rdate",
     NULL::TIMESTAMP[] "exdate",
-    NULL::TEXT "timezone"
-  FROM candidate_rruleset
+    NULL::TEXT "timezone";
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 

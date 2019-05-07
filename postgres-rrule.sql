@@ -111,7 +111,20 @@ RETURNS BOOLEAN AS $$
     COALESCE(months = seconds, TRUE)
   FROM factors;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
+$$ LANGUAGE SQL IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
+RETURNS SETOF TEXT AS $$
+  -- Clear all lines except the ones starting with marker
+  WITH A5 as (SELECT regexp_replace(input, '^(?!' || marker || ').*?$',  '', 'ng') "r"),
+  -- Replace carriage returns with blank space.
+  A10 as (SELECT regexp_replace(A5."r", E'[\\n\\r]+',  '', 'g') "r" FROM A5),
+  -- Remove marker prefix.
+  A15 as (SELECT regexp_replace(A10."r", marker || ':', '') "r" FROM A10),
+  -- Split each key-value pair into a row in a table
+  A20 as (SELECT regexp_split_to_table(A15."r", ';') "r" FROM A15)
+  -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}
+  SELECT "r" AS "y" FROM A20
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
 RETURNS INTEGER AS $$
     SELECT row_number FROM (
         SELECT (row_number() OVER ())::INTEGER, "value"
@@ -298,39 +311,32 @@ END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
 CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
-
-WITH "split_into_tokens" AS (
-  SELECT
-    "y"[1] AS "key",
-    "y"[2] AS "val"
-  FROM (
-    SELECT regexp_split_to_array("r", '=') AS "y"
-    FROM regexp_split_to_table(
-      regexp_replace(
-        regexp_replace($1::text, 'DTSTART.*:', ''),
-        'RRULE:',
-        ''
-      ),
-      ';'
-    ) "r"
-  ) "x"
+DECLARE
+  marker text := 'RRULE';
+  result _rrule.RRULE;
+BEGIN
+WITH "tokens" AS (
+  WITH A20 as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
+  -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}
+  A30 as (SELECT regexp_split_to_array("r", '=') AS "y" FROM A20)
+  SELECT "y"[1] AS "key", "y"[2] AS "val" FROM A30
 ),
-candidate_rrule AS (
+candidate AS (
   SELECT
-    (SELECT "val"::_rrule.FREQ FROM "split_into_tokens" WHERE "key" = 'FREQ') AS "freq",
-    (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'INTERVAL') AS "interval",
-    (SELECT "val"::INTEGER FROM "split_into_tokens" WHERE "key" = 'COUNT') AS "count",
-    (SELECT "val"::TIMESTAMP FROM "split_into_tokens" WHERE "key" = 'UNTIL') AS "until",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYHOUR') AS "byhour",
-    (SELECT _rrule.day_array("val") FROM "split_into_tokens" WHERE "key" = 'BYDAY') AS "byday",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTHDAY') AS "bymonthday",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYYEARDAY') AS "byyearday",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYWEEKNO') AS "byweekno",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYMONTH') AS "bymonth",
-    (SELECT _rrule.integer_array("val") FROM "split_into_tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
-    (SELECT "val"::_rrule.DAY FROM "split_into_tokens" WHERE "key" = 'WKST') AS "wkst"
+    (SELECT "val"::_rrule.FREQ FROM "tokens" WHERE "key" = 'FREQ') AS "freq",
+    (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'INTERVAL') AS "interval",
+    (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'COUNT') AS "count",
+    (SELECT "val"::TIMESTAMP FROM "tokens" WHERE "key" = 'UNTIL') AS "until",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYHOUR') AS "byhour",
+    (SELECT _rrule.day_array("val") FROM "tokens" WHERE "key" = 'BYDAY') AS "byday",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYMONTHDAY') AS "bymonthday",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYYEARDAY') AS "byyearday",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYWEEKNO') AS "byweekno",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYMONTH') AS "bymonth",
+    (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYSETPOS') AS "bysetpos",
+    (SELECT "val"::_rrule.DAY FROM "tokens" WHERE "key" = 'WKST') AS "wkst"
 )
 SELECT
   "freq",
@@ -349,7 +355,8 @@ SELECT
   "bysetpos",
   -- DEFAULT value for wkst
   COALESCE("wkst", 'MO') AS "wkst"
-FROM candidate_rrule
+INTO result
+FROM candidate
 -- FREQ is required
 WHERE "freq" IS NOT NULL
 -- FREQ=YEARLY required if BYWEEKNO is provided
@@ -378,7 +385,9 @@ AND (
 AND ("count" IS NULL OR "until" IS NULL)
 AND ("interval" IS NULL OR "interval" > 0);
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 
 
 CREATE OR REPLACE FUNCTION _rrule.text(_rrule.RRULE)
@@ -403,32 +412,14 @@ RETURNS TEXT AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
-  WITH "start" AS (
-      SELECT * FROM regexp_split_to_table(
-        regexp_replace(
-          regexp_replace(
-            $1::text,
-            'RRULE:.*',
-            ''
-          ),
-          'DTSTART.*:',
-          ''
-        ),
-        ';'
-      ) "date"
-  ),
-  candidate_rruleset AS (
-      SELECT
-        (SELECT "date"::timestamp FROM "start" LIMIT 1) AS "dtstart"
-  )
+  WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x")
   SELECT
-    "dtstart",
+    (SELECT "x"::timestamp FROM "dtstart-line" LIMIT 1) AS "dtstart",
     ARRAY[_rrule.rrule($1)] "rrule",
     ARRAY[]::_rrule.RRULE[] "exrule",
     NULL::TIMESTAMP[] "rdate",
     NULL::TIMESTAMP[] "exdate",
-    NULL::TEXT "timezone"
-  FROM candidate_rruleset
+    NULL::TEXT "timezone";
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 -- All of the function(rrule, ...) forms also accept a text argument, which will
