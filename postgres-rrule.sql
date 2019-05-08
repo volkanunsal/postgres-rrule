@@ -10,12 +10,6 @@ CREATE TYPE _rrule.FREQ AS ENUM (
   'MONTHLY',
   'WEEKLY',
   'DAILY'
-
-  -- NOTE: Disabled due to performance concerns.
-
-  -- 'HOURLY',
-  -- 'MINUTELY',
-  -- 'SECONDLY'
 );
 
 CREATE TYPE _rrule.DAY AS ENUM (
@@ -130,7 +124,7 @@ RETURNS SETOF TEXT AS $$
   FROM A20
   WHERE "r" != '';
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
+CREATE OR REPLACE FUNCTION _rrule.timestamp_to_day("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
   SELECT CAST(CASE to_char("ts", 'DY')
     WHEN 'MON' THEN 'MO'
     WHEN 'TUE' THEN 'TU'
@@ -143,7 +137,7 @@ CREATE OR REPLACE FUNCTION _rrule.to_DAY("ts" TIMESTAMP) RETURNS _rrule.DAY AS $
 $$ LANGUAGE SQL IMMUTABLE;
 
 CREATE CAST (TIMESTAMP AS _rrule.DAY)
-  WITH FUNCTION _rrule.to_DAY(TIMESTAMP)
+  WITH FUNCTION _rrule.timestamp_to_day(TIMESTAMP)
   AS IMPLICIT;CREATE OR REPLACE FUNCTION _rrule.enum_index_of(anyenum)
 RETURNS INTEGER AS $$
     SELECT row_number FROM (
@@ -683,6 +677,10 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
+  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input")) THEN
+    RETURN NULL;
+  END IF;
+
   SELECT
     "freq",
     -- Default value for INTERVAL
@@ -750,6 +748,20 @@ BEGIN
   RETURN result;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset_array("input" jsonb)
+RETURNS _rrule.RRULESET[] AS $$
+DECLARE
+  item jsonb;
+  out _rrule.RRULESET[] := '{}'::_rrule.RRULESET[];
+BEGIN
+  FOR item IN SELECT * FROM jsonb_array_elements("input")
+  LOOP
+    out := (SELECT out || _rrule.jsonb_to_rruleset(item));
+  END LOOP;
+
+  RETURN out;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rrule_to_jsonb("input" _rrule.RRULE)
 RETURNS jsonb AS $$
 BEGIN
@@ -791,6 +803,19 @@ BEGIN
     'rdate', "input"."rdate",
     'exdate', "input"."exdate"
   ));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_array_to_jsonb("input" _rrule.RRULESET[])
+RETURNS jsonb AS $$
+DECLARE
+  item _rrule.RRULESET;
+  out jsonb := '[]'::jsonb;
+BEGIN
+  FOREACH item IN ARRAY "input" LOOP
+    out := (SELECT out || _rrule.rruleset_to_jsonb(item));
+  END LOOP;
+
+  RETURN out;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (
@@ -857,3 +882,14 @@ CREATE CAST (_rrule.RRULE AS jsonb)
 -- CREATE CAST (_rrule.RRULESET AS jsonb)
 --   WITH FUNCTION _rrule.rruleset_to_jsonb(_rrule.RRULESET)
 --   AS IMPLICIT;
+
+
+CREATE CAST (jsonb AS _rrule.RRULESET[])
+  WITH FUNCTION _rrule.jsonb_to_rruleset_array(jsonb)
+  AS IMPLICIT;
+
+
+-- CREATE CAST (_rrule.RRULESET[] AS jsonb)
+--   WITH FUNCTION _rrule.rruleset_array_to_jsonb(_rrule.RRULESET[])
+--   AS IMPLICIT;
+

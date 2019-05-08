@@ -3,12 +3,6 @@ CREATE TYPE _rrule.FREQ AS ENUM (
   'MONTHLY',
   'WEEKLY',
   'DAILY'
-
-  -- NOTE: Disabled due to performance concerns.
-
-  -- 'HOURLY',
-  -- 'MINUTELY',
-  -- 'SECONDLY'
 );
 
 CREATE TYPE _rrule.DAY AS ENUM (

@@ -3,6 +3,10 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
+  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input")) THEN
+    RETURN NULL;
+  END IF;
+
   SELECT
     "freq",
     -- Default value for INTERVAL

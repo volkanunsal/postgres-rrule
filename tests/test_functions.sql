@@ -2,7 +2,7 @@ BEGIN;
 
 
 
-SELECT plan(8);
+SELECT plan(10);
 
 SET search_path TO _rrule, public;
 
@@ -61,6 +61,18 @@ SELECT is(
   _rrule.is_finite('(DAILY,1,,,,,,,,,,,,)'::RRULE),
   false,
   'No count or until: non-finite'
+);
+
+SELECT is(
+  _rrule.rruleset_array_to_jsonb(ARRAY['{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb::_rrule.RRULESET]::_rrule.RRULESET[]),
+  $$[{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "exrule": {}, "dtstart": "1997-09-02T09:00:00"}]$$::jsonb,
+  'rruleset_array_to_jsonb outputs correct result'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset_array('[{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "exrule": {}, "dtstart": "1997-09-02T09:00:00"}]'::jsonb),
+  $${"(\"1997-09-02 09:00:00\",\"1997-09-03 09:00:00\",\"(WEEKLY,1,4,,,,,,,,,,,MO)\",\"(,,,,,,,,,,,,,)\",,)"}$$::_rrule.RRULESET[],
+  'jsonb_to_rruleset_array outputs correct result'
 );
 
 SELECT * FROM finish();

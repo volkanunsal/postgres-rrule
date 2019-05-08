@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(4);
+SELECT plan(5);
 
 SET search_path TO public, _rrule;
 
@@ -34,6 +34,14 @@ SELECT is(
     (WEEKLY,1,4,,,,,,,,,,,MO)
   $$,
   'when jsonb is cast to RRULE.'
+);
+
+SELECT is(
+  '[{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "exrule": {}, "dtstart": "1997-09-02T09:00:00"}]'::text::jsonb::_rrule.RRULESET[],
+  $$
+    {"(\"1997-09-02 09:00:00\",\"1997-09-03 09:00:00\",\"(WEEKLY,1,4,,,,,,,,,,,MO)\",\"(,,,,,,,,,,,,,)\",,)"}
+  $$,
+  'when jsonb is cast to RRULESET array.'
 );
 
 
