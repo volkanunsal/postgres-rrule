@@ -34,3 +34,9 @@ CREATE OPERATOR @> (
   PROCEDURE = _rrule.contains_timestamp
 );
 
+CREATE OPERATOR @> (
+  LEFTARG = _rrule.RRULESET[],
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.rruleset_array_contains_timestamp
+);
+
