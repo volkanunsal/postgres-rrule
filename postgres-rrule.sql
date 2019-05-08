@@ -659,17 +659,17 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.rruleset, TIMESTAMP)
+CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
 DECLARE
-  isEmpty boolean;
+  inSet boolean;
 BEGIN
   SELECT COUNT(*) > 0
-  INTO isEmpty
+  INTO inSet
   FROM _rrule.after($1, $2 - INTERVAL '1 month') "ts"
   WHERE "ts"::date = $2::date;
 
-  RETURN isEmpty;
+  RETURN inSet;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rrule("input" jsonb)
