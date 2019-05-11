@@ -729,8 +729,8 @@ BEGIN
   SELECT
     "dtstart"::TIMESTAMP,
     "dtend"::TIMESTAMP,
-    jsonb_to_rrule("rrule") "rrule",
-    jsonb_to_rrule("exrule") "exrule",
+    _rrule.jsonb_to_rrule("rrule") "rrule",
+    _rrule.jsonb_to_rrule("exrule") "exrule",
     "rdate"::TIMESTAMP[],
     "exdate"::TIMESTAMP[]
   INTO result
