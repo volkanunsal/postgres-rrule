@@ -26,6 +26,8 @@ And modify your search path to include `_rrule` schema:
 
 We create a table (in a newly created `_rrule` schema) called `RRULE` to generate start dates from rule criteria. The table constraints enforce the validity of dates in the table.
 
+All of the types and functions are created in that schema. You can parse or query `RRULE` specifications.
+
 ## Example
 
 Parsing RRULE.
@@ -58,7 +60,6 @@ newuser@newuser >> select '
 (1 row)
 ```
 
-All of the types and functions are created in that schema.
 
 ### [`RRULE`](https://github.com/volkanunsal/postgres-rrule/blob/master/src/types/types.sql#L19-L36) Operators
 
