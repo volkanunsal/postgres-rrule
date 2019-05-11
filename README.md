@@ -30,7 +30,7 @@ All of the types and functions are created in that schema. You can parse or quer
 
 ## Example
 
-Parsing RRULE.
+Parsing
 
 ```
 newuser@newuser >> select '
@@ -45,13 +45,25 @@ newuser@newuser >> select '
 (1 row)
 ```
 
-Querying RRULE
+Querying `RRULESET`.
 
 ```
 newuser@newuser >> select '
     DTSTART:19970902T090000
     RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
     '::TEXT::RRULESET @> '19970902T090000'::timestamp;
+┌──────────┐
+│ ?column? │
+├──────────┤
+│ t        │
+└──────────┘
+(1 row)
+```
+
+Also works with `jsonb`
+
+```
+newuser@newuser >> select '{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "dtstart": "1997-09-02T09:00:00"}'::text::jsonb::rruleset @> '19970902T090000'::timestamp;
 ┌──────────┐
 │ ?column? │
 ├──────────┤
