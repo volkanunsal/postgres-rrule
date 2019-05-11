@@ -26,6 +26,38 @@ And modify your search path to include `_rrule` schema:
 
 We create a table (in a newly created `_rrule` schema) called `RRULE` to generate start dates from rule criteria. The table constraints enforce the validity of dates in the table.
 
+## Example
+
+Parsing RRULE.
+
+```
+newuser@newuser >> select '
+    DTSTART:19970902T090000
+    RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
+    '::TEXT::RRULESET;
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                   rruleset                                    │
+├───────────────────────────────────────────────────────────────────────────────┤
+│ ("1997-09-02 09:00:00",,"(WEEKLY,1,,""1998-09-02 09:00:00"",,,,,,,,,,MO)",,,) │
+└───────────────────────────────────────────────────────────────────────────────┘
+(1 row)
+```
+
+Querying RRULE
+
+```
+newuser@newuser >> select '
+    DTSTART:19970902T090000
+    RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
+    '::TEXT::RRULESET @> '19970902T090000'::timestamp;
+┌──────────┐
+│ ?column? │
+├──────────┤
+│ t        │
+└──────────┘
+(1 row)
+```
+
 All of the types and functions are created in that schema.
 
 ### [`RRULE`](https://github.com/volkanunsal/postgres-rrule/blob/master/src/types/types.sql#L19-L36) Operators
