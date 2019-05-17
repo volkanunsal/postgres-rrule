@@ -101,6 +101,24 @@ SELECT results_eq(
   'testWeeklyByWeekDay'
 );
 
+-- SELECT results_eq(
+--   $$ SELECT * FROM _rrule.occurrences(_rrule.jsonb_to_rruleset_array('[{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "exrule": {}, "dtstart": "1997-09-02T09:00:00"},{"dtend": "1998-09-03T09:00:00", "rrule": {"freq": "MONTHLY", "wkst": "MO", "count": 12, "interval": 1}, "exrule": {}, "dtstart": "1997-09-02T09:00:00"}]'::jsonb), '(,)'::TSRANGE) LIMIT 10;
+--   )$$,
+--   $$ VALUES
+--       ('1997-09-02 09:00:00'),
+--       ('1997-09-09 09:00:00'),
+--       ('1997-09-16 09:00:00'),
+--       ('1997-09-23 09:00:00'),
+--       ('1997-10-02 09:00:00'),
+--       ('1997-11-02 09:00:00'),
+--       ('1997-12-02 09:00:00'),
+--       ('1998-01-02 09:00:00'),
+--       ('1998-02-02 09:00:00'),
+--       ('1998-03-02 09:00:00')
+--   $$,
+--   'testRulesetArray'
+-- );
+
 SELECT * FROM finish();
 
 ROLLBACK;

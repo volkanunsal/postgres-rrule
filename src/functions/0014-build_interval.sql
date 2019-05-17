@@ -8,5 +8,5 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
 RETURNS INTERVAL AS $$
-  SELECT _rrule.build_interval($1."interval", $1."freq");
+  SELECT _rrule.build_interval(COALESCE($1."interval", 1), $1."freq");
 $$ LANGUAGE SQL IMMUTABLE STRICT;

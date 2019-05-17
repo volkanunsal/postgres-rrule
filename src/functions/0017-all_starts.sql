@@ -14,7 +14,7 @@ DECLARE
   year int := EXTRACT(YEAR FROM "dtstart")::integer;
   year_start timestamp := make_timestamp(year, 1, 1, hour, minute, second);
   year_end timestamp := make_timestamp(year, 12, 31, hour, minute, second);
-  interv INTERVAL := build_interval("rrule");
+  interv INTERVAL := _rrule.build_interval("rrule");
 BEGIN
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
@@ -43,7 +43,7 @@ BEGIN
       SELECT "ts"
       FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
       WHERE (
-        "ts"::DAY = ANY("rrule"."byday")
+        "ts"::_rrule.DAY = ANY("rrule"."byday")
       )
       AND "ts" <= ("dtstart" + INTERVAL '7 days')
     ) as "ts"
@@ -68,7 +68,7 @@ BEGIN
   SELECT DISTINCT "ts"
   FROM A11
   WHERE (
-    "rrule"."byday" IS NULL OR "ts"::DAY = ANY("rrule"."byday")
+    "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
   )
   AND (
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")

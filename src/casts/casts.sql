@@ -8,10 +8,6 @@ CREATE CAST (TEXT AS _rrule.RRULESET)
   AS IMPLICIT;
 
 
-CREATE CAST (jsonb AS _rrule.RRULESET)
-  WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
-  AS IMPLICIT;
-
 
 CREATE CAST (jsonb AS _rrule.RRULE)
   WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
@@ -23,14 +19,18 @@ CREATE CAST (_rrule.RRULE AS jsonb)
   AS IMPLICIT;
 
 
+-- CREATE CAST (jsonb AS _rrule.RRULESET)
+--   WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
+--   AS IMPLICIT;
+
 -- CREATE CAST (_rrule.RRULESET AS jsonb)
 --   WITH FUNCTION _rrule.rruleset_to_jsonb(_rrule.RRULESET)
 --   AS IMPLICIT;
 
 
-CREATE CAST (jsonb AS _rrule.RRULESET[])
-  WITH FUNCTION _rrule.jsonb_to_rruleset_array(jsonb)
-  AS IMPLICIT;
+-- CREATE CAST (jsonb AS _rrule.RRULESET[])
+--   WITH FUNCTION _rrule.jsonb_to_rruleset_array(jsonb)
+--   AS IMPLICIT;
 
 
 -- CREATE CAST (_rrule.RRULESET[] AS jsonb)

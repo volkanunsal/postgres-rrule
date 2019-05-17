@@ -197,7 +197,7 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
 RETURNS INTERVAL AS $$
-  SELECT _rrule.build_interval($1."interval", $1."freq");
+  SELECT _rrule.build_interval(COALESCE($1."interval", 1), $1."freq");
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 -- rrule containment.
 -- intervals must be compatible.
@@ -243,7 +243,7 @@ DECLARE
   year int := EXTRACT(YEAR FROM "dtstart")::integer;
   year_start timestamp := make_timestamp(year, 1, 1, hour, minute, second);
   year_end timestamp := make_timestamp(year, 12, 31, hour, minute, second);
-  interv INTERVAL := build_interval("rrule");
+  interv INTERVAL := _rrule.build_interval("rrule");
 BEGIN
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
@@ -272,7 +272,7 @@ BEGIN
       SELECT "ts"
       FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
       WHERE (
-        "ts"::DAY = ANY("rrule"."byday")
+        "ts"::_rrule.DAY = ANY("rrule"."byday")
       )
       AND "ts" <= ("dtstart" + INTERVAL '7 days')
     ) as "ts"
@@ -297,7 +297,7 @@ BEGIN
   SELECT DISTINCT "ts"
   FROM A11
   WHERE (
-    "rrule"."byday" IS NULL OR "ts"::DAY = ANY("rrule"."byday")
+    "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
   )
   AND (
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
@@ -517,8 +517,6 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "occurrence" <@ "between";
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
-
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
   "tsrange" TSRANGE
@@ -553,7 +551,6 @@ RETURNS SETOF TIMESTAMP AS $$
   EXCEPT
   SELECT "occurrence" FROM "exdates"
   ORDER BY "occurrence";
-
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
@@ -561,7 +558,28 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
+CREATE OR REPLACE FUNCTION _rrule.occurrences(
+  "rruleset_array" _rrule.RRULESET[],
+  "tsrange" TSRANGE
+)
+RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  i int;
+  lim int;
+  q text := '';
+BEGIN
+  lim := array_length("rruleset_array", 1);
+  FOR i IN 1..lim
+  LOOP
+    q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
+    IF i != lim THEN
+      q := q || ' UNION ';
+    END IF;
+  END LOOP;
+  q := q || ' ORDER BY occurrences ASC';
+  RETURN QUERY EXECUTE q;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
   RETURN (SELECT "ts"
@@ -677,7 +695,7 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
-  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input")) THEN
+  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input") WHERE "input"::TEXT <> 'null') THEN
     RETURN NULL;
   END IF;
 
@@ -707,7 +725,7 @@ BEGIN
     "bysecond" integer[],
     "byminute" integer[],
     "byhour" integer[],
-    "byday" integer[],
+    "byday" text[],
     "bymonthday" integer[],
     "byyearday" integer[],
     "byweekno" integer[],
@@ -833,6 +851,36 @@ BEGIN
   RETURN false;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_after_timestamp(_rrule.RRULESET[], TIMESTAMP)
+RETURNS BOOLEAN AS $$
+DECLARE
+  item _rrule.RRULESET;
+BEGIN
+  FOREACH item IN ARRAY $1
+  LOOP
+    IF (SELECT count(*) > 0 FROM _rrule.after(item, $2) LIMIT 1) THEN
+      RETURN true;
+    END IF;
+  END LOOP;
+
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_before_timestamp(_rrule.RRULESET[], TIMESTAMP)
+RETURNS BOOLEAN AS $$
+DECLARE
+  item _rrule.RRULESET;
+BEGIN
+  FOREACH item IN ARRAY $1
+  LOOP
+    IF (SELECT count(*) > 0 FROM _rrule.before(item, $2) LIMIT 1) THEN
+      RETURN true;
+    END IF;
+  END LOOP;
+
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OPERATOR = (
   LEFTARG = _rrule.RRULE,
   RIGHTARG = _rrule.RRULE,
@@ -885,10 +933,6 @@ CREATE CAST (TEXT AS _rrule.RRULESET)
   AS IMPLICIT;
 
 
-CREATE CAST (jsonb AS _rrule.RRULESET)
-  WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
-  AS IMPLICIT;
-
 
 CREATE CAST (jsonb AS _rrule.RRULE)
   WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
@@ -900,14 +944,18 @@ CREATE CAST (_rrule.RRULE AS jsonb)
   AS IMPLICIT;
 
 
+-- CREATE CAST (jsonb AS _rrule.RRULESET)
+--   WITH FUNCTION _rrule.jsonb_to_rruleset(jsonb)
+--   AS IMPLICIT;
+
 -- CREATE CAST (_rrule.RRULESET AS jsonb)
 --   WITH FUNCTION _rrule.rruleset_to_jsonb(_rrule.RRULESET)
 --   AS IMPLICIT;
 
 
-CREATE CAST (jsonb AS _rrule.RRULESET[])
-  WITH FUNCTION _rrule.jsonb_to_rruleset_array(jsonb)
-  AS IMPLICIT;
+-- CREATE CAST (jsonb AS _rrule.RRULESET[])
+--   WITH FUNCTION _rrule.jsonb_to_rruleset_array(jsonb)
+--   AS IMPLICIT;
 
 
 -- CREATE CAST (_rrule.RRULESET[] AS jsonb)

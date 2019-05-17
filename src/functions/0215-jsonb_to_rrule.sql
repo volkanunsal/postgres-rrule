@@ -3,7 +3,7 @@ RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
 BEGIN
-  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input")) THEN
+  IF (SELECT count(*) = 0 FROM jsonb_object_keys("input") WHERE "input"::TEXT <> 'null') THEN
     RETURN NULL;
   END IF;
 
@@ -33,7 +33,7 @@ BEGIN
     "bysecond" integer[],
     "byminute" integer[],
     "byhour" integer[],
-    "byday" integer[],
+    "byday" text[],
     "bymonthday" integer[],
     "byyearday" integer[],
     "byweekno" integer[],
