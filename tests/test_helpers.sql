@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(7);
+SELECT plan(13);
 
 SET search_path TO _rrule, public;
 
@@ -61,6 +61,43 @@ SELECT cmp_ok(
   '(DAILY,2,,,,,,,,,,,,)'::RRULE,
   'Every day contains every second day'
 );
+
+SELECT is(
+  _rrule.jsonb_to_rruleset_array('[{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}]'::text::jsonb) > '19990904T090000'::timestamp,
+  false,
+  '> operator works with rruleset_array - returns false'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset_array('[{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}]'::text::jsonb) > '19900902T090000'::timestamp,
+  true,
+  '> operator works with rruleset_array - returns true'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb) > '19990904T090000'::timestamp,
+  false,
+  '> operator works with rruleset - returns false'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb) > '19900902T090000'::timestamp,
+  true,
+  '> operator works with rruleset - returns true'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb) < '19970904T090000'::timestamp,
+  true,
+  '< operator works with rruleset - returns true'
+);
+
+SELECT is(
+  _rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb) < '19900902T090000'::timestamp,
+  false,
+  '< operator works with rruleset - returns false'
+);
+
 
 SELECT * FROM finish();
 

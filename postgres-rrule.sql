@@ -851,6 +851,14 @@ BEGIN
   RETURN false;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_has_after_timestamp(_rrule.RRULESET, TIMESTAMP)
+RETURNS BOOLEAN AS $$
+  SELECT count(*) > 0 FROM _rrule.after($1, $2) LIMIT 1;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+CREATE OR REPLACE FUNCTION _rrule.rruleset_has_before_timestamp(_rrule.RRULESET, TIMESTAMP)
+RETURNS BOOLEAN AS $$
+  SELECT count(*) > 0 FROM _rrule.before($1, $2) LIMIT 1;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_after_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -921,6 +929,31 @@ CREATE OPERATOR @> (
   LEFTARG = _rrule.RRULESET[],
   RIGHTARG = TIMESTAMP,
   PROCEDURE = _rrule.rruleset_array_contains_timestamp
+);
+
+
+CREATE OPERATOR > (
+  LEFTARG = _rrule.RRULESET[],
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.rruleset_array_has_after_timestamp
+);
+
+CREATE OPERATOR < (
+  LEFTARG = _rrule.RRULESET[],
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.rruleset_array_has_before_timestamp
+);
+
+CREATE OPERATOR > (
+  LEFTARG = _rrule.RRULESET,
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.rruleset_has_after_timestamp
+);
+
+CREATE OPERATOR < (
+  LEFTARG = _rrule.RRULESET,
+  RIGHTARG = TIMESTAMP,
+  PROCEDURE = _rrule.rruleset_has_before_timestamp
 );
 
 CREATE CAST (TEXT AS _rrule.RRULE)
