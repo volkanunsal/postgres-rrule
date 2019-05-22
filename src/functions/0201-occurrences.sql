@@ -107,7 +107,6 @@ DECLARE
 BEGIN
   lim := array_length("rruleset_array", 1);
 
-  -- TODO: test
   IF lim IS NULL THEN
     q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
   ELSE
