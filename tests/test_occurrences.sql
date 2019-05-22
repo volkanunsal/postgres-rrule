@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(7);
+SELECT plan(8);
 
 SET search_path TO public, _rrule;
 
@@ -99,6 +99,15 @@ SELECT results_eq(
     ('2019-05-14T09:00:00')
   $$,
   'testWeeklyByWeekDay'
+);
+
+SELECT results_eq(
+  $$ SELECT * FROM occurrences(
+    ARRAY[]::_rrule.RRULESET[],
+    tsrange('2019-05-06T09:00:00'::TIMESTAMP, NULL)
+  );$$,
+  $$ VALUES (NULL) LIMIT 0$$,
+  'testEmptyArray'
 );
 
 -- SELECT results_eq(

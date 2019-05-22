@@ -569,14 +569,21 @@ DECLARE
   q text := '';
 BEGIN
   lim := array_length("rruleset_array", 1);
-  FOR i IN 1..lim
-  LOOP
-    q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
-    IF i != lim THEN
-      q := q || ' UNION ';
-    END IF;
-  END LOOP;
-  q := q || ' ORDER BY occurrences ASC';
+
+  -- TODO: test
+  IF lim IS NULL THEN
+    q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
+  ELSE
+    FOR i IN 1..lim
+    LOOP
+      q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
+      IF i != lim THEN
+        q := q || ' UNION ';
+      END IF;
+    END LOOP;
+    q := q || ' ORDER BY occurrences ASC';
+  END IF;
+
   RETURN QUERY EXECUTE q;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
@@ -682,6 +689,8 @@ RETURNS BOOLEAN AS $$
 DECLARE
   inSet boolean;
 BEGIN
+  -- TODO: Not sure what how this is finding a timestamp that is contained
+  -- by the rruleset.
   SELECT COUNT(*) > 0
   INTO inSet
   FROM _rrule.after($1, $2 - INTERVAL '1 month') "ts"

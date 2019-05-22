@@ -106,14 +106,21 @@ DECLARE
   q text := '';
 BEGIN
   lim := array_length("rruleset_array", 1);
-  FOR i IN 1..lim
-  LOOP
-    q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
-    IF i != lim THEN
-      q := q || ' UNION ';
-    END IF;
-  END LOOP;
-  q := q || ' ORDER BY occurrences ASC';
+
+  -- TODO: test
+  IF lim IS NULL THEN
+    q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
+  ELSE
+    FOR i IN 1..lim
+    LOOP
+      q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
+      IF i != lim THEN
+        q := q || ' UNION ';
+      END IF;
+    END LOOP;
+    q := q || ' ORDER BY occurrences ASC';
+  END IF;
+
   RETURN QUERY EXECUTE q;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
