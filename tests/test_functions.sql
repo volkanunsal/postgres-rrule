@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(17);
+SELECT plan(13);
 
 SET search_path TO _rrule, public;
 
@@ -36,30 +36,6 @@ SELECT cmp_ok(
   'Different rrule objects compare as not equal.'
 );
 
-
-SELECT is(
-  _rrule.is_finite('(DAILY,1,,"1997-12-24 00:00:00",,,,,,,,,,MO)'::RRULE),
-  true,
-  'Has until timestamp: finite'
-);
-
-SELECT is(
-  _rrule.is_finite('(DAILY,1,10,,,,,,,,,,,)'::RRULE),
-  true,
-  'Has count: finite'
-);
-
-SELECT is(
-  _rrule.is_finite('(DAILY,1,,"1997-12-24 00:00:00",,,,,,,,,,MO)'::RRULE),
-  true,
-  'Has count AND until timestamp: finite'
-);
-
-SELECT is(
-  _rrule.is_finite('(DAILY,1,,,,,,,,,,,,)'::RRULE),
-  false,
-  'No count or until: non-finite'
-);
 
 SELECT is(
   _rrule.rruleset_array_to_jsonb(ARRAY[_rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": {"freq": "WEEKLY", "count": 4}}'::text::jsonb)]::_rrule.RRULESET[]),

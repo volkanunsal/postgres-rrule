@@ -452,13 +452,24 @@ RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite(_rrule.rrule("rrule"));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
-
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  SELECT _rrule.is_finite("rruleset"."rrule"::text::_rrule.RRULE);
+  SELECT _rrule.is_finite("rruleset"."rrule")
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
+RETURNS BOOLEAN AS $$
+DECLARE
+  item _rrule.RRULESET;
+BEGIN
+  FOREACH item IN ARRAY "rruleset_array" LOOP
+    IF (SELECT _rrule.is_finite(item)) THEN
+      RETURN true;
+    END IF;
+  END LOOP;
+  RETURN false;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 
 
@@ -502,7 +513,6 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -522,7 +532,6 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-
   WITH "rrules" AS (
     SELECT
       "rruleset"."dtstart",
@@ -561,6 +570,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset_array" _rrule.RRULESET[],
   "tsrange" TSRANGE
+  -- TODO: add a default limit and then use that limit from `first` and `last`
 )
 RETURNS SETOF TIMESTAMP AS $$
 DECLARE
@@ -570,7 +580,6 @@ DECLARE
 BEGIN
   lim := array_length("rruleset_array", 1);
 
-  -- TODO: test
   IF lim IS NULL THEN
     q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
   ELSE
@@ -606,7 +615,14 @@ CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset") occurrence
-  ORDER BY occurrence DESC LIMIT 1;
+  ORDER BY occurrence ASC LIMIT 1;
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _rrule.first("rruleset_array" _rrule.RRULESET[])
+RETURNS TIMESTAMP AS $$
+  SELECT occurrence
+  FROM _rrule.occurrences("rruleset_array", '(,)'::TSRANGE) occurrence
+  ORDER BY occurrence ASC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
@@ -622,14 +638,27 @@ RETURNS TIMESTAMP AS $$
   SELECT _rrule.last(_rrule.rrule("rrule"), "dtstart");
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
-
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset") occurrence
   ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
+
+-- TODO: Ensure to check whether the range is finite. If not, we should return null
+-- or something meaningful.
+CREATE OR REPLACE FUNCTION _rrule.last("rruleset_array" _rrule.RRULESET[])
+RETURNS SETOF TIMESTAMP AS $$
+BEGIN
+  IF (SELECT _rrule.is_finite("rruleset_array")) THEN
+    RETURN QUERY SELECT occurrence
+    FROM _rrule.occurrences("rruleset_array", '(,)'::TSRANGE) occurrence
+    ORDER BY occurrence DESC LIMIT 1;
+  ELSE
+    RETURN QUERY SELECT NULL::TIMESTAMP;
+  END IF;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.before(
@@ -647,12 +676,17 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.before(_rrule.rrule("rrule"), "dtstart", "when");
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
-
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+-- TODO: test
+CREATE OR REPLACE FUNCTION _rrule.before("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
+RETURNS SETOF TIMESTAMP AS $$
+  SELECT *
+  FROM _rrule.occurrences("rruleset_array", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
@@ -676,12 +710,17 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.after(_rrule.rrule("rrule"), "dtstart", "when");
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
-
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
+$$ LANGUAGE SQL STRICT IMMUTABLE;
+
+-- TODO: test
+CREATE OR REPLACE FUNCTION _rrule.after("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
+RETURNS SETOF TIMESTAMP AS $$
+  SELECT *
+  FROM _rrule.occurrences("rruleset_array", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)

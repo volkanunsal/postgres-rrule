@@ -39,7 +39,6 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
-
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -59,7 +58,6 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-
   WITH "rrules" AS (
     SELECT
       "rruleset"."dtstart",
@@ -98,6 +96,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset_array" _rrule.RRULESET[],
   "tsrange" TSRANGE
+  -- TODO: add a default limit and then use that limit from `first` and `last`
 )
 RETURNS SETOF TIMESTAMP AS $$
 DECLARE
