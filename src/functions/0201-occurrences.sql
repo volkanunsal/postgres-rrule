@@ -123,3 +123,14 @@ BEGIN
   RETURN QUERY EXECUTE q;
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION _rrule.occurences_without_exdates ("rruleset-input" TEXT)
+RETURNS SETOF TIMESTAMP AS $$
+  WITH rruleset AS (
+      SELECT * FROM _rrule.rruleset("rruleset-input")
+  ), occurrences AS (
+      SELECT _rrule.occurrences(rruleset) AS date FROM rruleset
+  ), occurrences_without_exdates AS (
+      SELECT date FROM occurrences, rruleset WHERE date != any (rruleset.exdate)
+  ) SELECT date FROM occurrences_without_exdates;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
