@@ -1,0 +1,17 @@
+# This is a basic workflow to help you get started with Actions
+
+on: pull_request
+name: Pull Request
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Setup perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.30'
+    - run: cpan TAP::Parser::SourceHandler::pgTAP
+    - name: Test
+      uses: skx/github-action-tester@master
