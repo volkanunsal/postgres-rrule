@@ -19,3 +19,25 @@ RETURNS TEXT AS $$
     || CASE WHEN $1."wkst" = 'MO' THEN '' ELSE COALESCE('WKST=' || $1."wkst" || ';', '') END
   , ';$', '');
 $$ LANGUAGE SQL IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION _rrule.text("input" _rrule.RRULESET)
+RETURNS TEXT AS $$
+DECLARE
+  rrule TEXT;
+  exrule TEXT;
+BEGIN
+  SELECT _rrule.text("input"."rrule")
+  INTO rrule;
+
+  SELECT _rrule.text("input"."exrule")
+  INTO exrule;
+
+  RETURN
+    COALESCE('DTSTART:' || "input"."dtstart" || '\n', '')
+    || COALESCE('DTEND:' || "input"."dtend" || '\n', '')
+    || COALESCE(rrule || '\n', '')
+    || COALESCE(exrule || '\n', '')
+    || COALESCE('RDATE:' || _rrule.array_join("input"."rdate", ',') || '\n', '')
+    || COALESCE('EXDATE:' || _rrule.array_join("input"."exdate", ',') || '\n', '');
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
