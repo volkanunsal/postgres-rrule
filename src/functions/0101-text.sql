@@ -6,7 +6,7 @@ RETURNS TEXT AS $$
     || COALESCE('FREQ=' || $1."freq" || ';', '')
     || CASE WHEN $1."interval" = 1 THEN '' ELSE COALESCE('INTERVAL=' || $1."interval" || ';', '') END
     || COALESCE('COUNT=' || $1."count" || ';', '')
-    || COALESCE('UNTIL=' || $1."until" || ';', '')
+    || COALESCE('UNTIL=' || TO_CHAR($1."until", 'YYYYMMDD"T"HH24MISS"Z"') || ';', '')
     || COALESCE('BYSECOND=' || _rrule.array_join($1."bysecond", ',') || ';', '')
     || COALESCE('BYMINUTE=' || _rrule.array_join($1."byminute", ',') || ';', '')
     || COALESCE('BYHOUR=' || _rrule.array_join($1."byhour", ',') || ';', '')
@@ -25,19 +25,24 @@ RETURNS TEXT AS $$
 DECLARE
   rrule TEXT;
   exrule TEXT;
+  l_rdate TEXT[];
+  l_exdate TEXT[];
 BEGIN
   SELECT _rrule.text("input"."rrule")
   INTO rrule;
 
   SELECT _rrule.text("input"."exrule")
   INTO exrule;
+  
+  SELECT array_agg(TO_CHAR(rdate, 'YYYYMMDD"T"HH24MISS"Z"')) FROM UNNEST("input"."rdate") as rdate INTO l_rdate;
+  SELECT array_agg(TO_CHAR(exdate, 'YYYYMMDD"T"HH24MISS"Z"')) FROM UNNEST("input"."exdate") as exdate INTO l_exdate;
 
   RETURN
-    COALESCE('DTSTART:' || "input"."dtstart" || '\n', '')
-    || COALESCE('DTEND:' || "input"."dtend" || '\n', '')
-    || COALESCE(rrule || '\n', '')
-    || COALESCE(exrule || '\n', '')
-    || COALESCE('RDATE:' || _rrule.array_join("input"."rdate", ',') || '\n', '')
-    || COALESCE('EXDATE:' || _rrule.array_join("input"."exdate", ',') || '\n', '');
+    COALESCE('DTSTART:' || TO_CHAR("input"."dtstart", 'YYYYMMDD"T"HH24MISS"Z"') || E'\n', '')
+    || COALESCE('DTEND:' || CASE WHEN "input"."dtend" IS NOT NULL THEN TO_CHAR("input"."dtend", 'YYYYMMDD"T"HH24MISS"Z"') ELSE NULL END || E'\n', '')
+    || COALESCE(rrule || E'\n', '')
+    || COALESCE(exrule || E'\n', '')
+    || COALESCE('RDATE:' || _rrule.array_join(l_rdate, ',') || E'\n', '')
+    || COALESCE('EXDATE:' || _rrule.array_join(l_exdate, ',') || E'\n', '');
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
