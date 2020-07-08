@@ -7,16 +7,16 @@ schema:
 	cat src/schema.sql >> postgres-rrule.sql
 
 types:
-	find src/types -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	cat src/types/*.sql >> postgres-rrule.sql
 
 functions:
-	find src/functions -name \*.sql| sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	cat src/functions/*.sql >> postgres-rrule.sql
 
 operators:
-	find src/operators -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	cat src/operators/*.sql >> postgres-rrule.sql
 
 casts:
-	find src/casts -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	cat src/casts/*.sql >> postgres-rrule.sql
 
 test:
 	psql -c "CREATE EXTENSION IF NOT EXISTS pgtap;" && pg_prove tests/test_*.sql
@@ -27,7 +27,7 @@ rm_rules:
 compile: rm_rules schema types functions operators casts
 
 execute:
-	psql -X -f postgres-rrule.sql
+	psql -U postgres -d synbird -X -f postgres-rrule.sql
 
 dev: execute
 

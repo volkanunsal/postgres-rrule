@@ -447,7 +447,6 @@ BEGIN
     || COALESCE('EXDATE:' || _rrule.array_join("input"."exdate", ',') || '\n', '');
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
-
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
   WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),
@@ -462,9 +461,7 @@ RETURNS _rrule.RRULESET AS $$
     (SELECT _rrule.rrule("x"::text) "rrule" FROM "exrule-line") as "exrule",
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "rdate-line" AS "rdate"),
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "exdate-line" AS "exdate");
-$$ LANGUAGE SQL IMMUTABLE STRICT;
-
--- All of the function(rrule, ...) forms also accept a text argument, which will
+$$ LANGUAGE SQL IMMUTABLE STRICT;-- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" _rrule.RRULE)
@@ -622,8 +619,7 @@ BEGIN
 
   RETURN QUERY EXECUTE q;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
-CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
   RETURN (SELECT "ts"
