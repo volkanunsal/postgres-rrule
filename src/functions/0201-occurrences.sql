@@ -105,9 +105,11 @@ DECLARE
   q text := '';
 BEGIN
   lim := array_length("rruleset_array", 1);
+  RAISE NOTICE 'lim %', lim;
 
   IF lim IS NULL THEN
     q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
+    RAISE NOTICE 'q %', q;
   ELSE
     FOR i IN 1..lim
     LOOP

@@ -221,7 +221,7 @@ RETURNS TIMESTAMP AS $$
   FROM (
     SELECT "rrule"."until"
     UNION
-    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * COALESCE("rrule"."count", CASE WHEN "rrule"."until" IS NOT NULL THEN NULL ELSE 1 END) AS "until"
+    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * COALESCE("rrule"."count", 1000, CASE WHEN "rrule"."until" IS NOT NULL THEN NULL ELSE 1 END) AS "until"
   ) "until" GROUP BY ();
 
 $$ LANGUAGE SQL IMMUTABLE STRICT;
@@ -604,9 +604,11 @@ DECLARE
   q text := '';
 BEGIN
   lim := array_length("rruleset_array", 1);
+  RAISE NOTICE 'lim %', lim;
 
   IF lim IS NULL THEN
     q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
+    RAISE NOTICE 'q %', q;
   ELSE
     FOR i IN 1..lim
     LOOP
@@ -620,7 +622,8 @@ BEGIN
 
   RETURN QUERY EXECUTE q;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
+$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
   RETURN (SELECT "ts"
