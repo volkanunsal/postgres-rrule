@@ -9,7 +9,7 @@ schema:
 types:
 	cat src/types/*.sql >> postgres-rrule.sql
 
-functions:
+funcs:
 	cat src/functions/*.sql >> postgres-rrule.sql
 
 operators:
@@ -24,7 +24,9 @@ test:
 rm_rules:
 	rm -f postgres-rrule.sql
 
-compile: rm_rules schema types functions operators casts
+compile: rm_rules schema types funcs operators casts
+
+functions: rm_rules funcs execute
 
 execute:
 	psql -U postgres -d synbird -X -f postgres-rrule.sql
