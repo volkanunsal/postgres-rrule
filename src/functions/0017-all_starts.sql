@@ -45,7 +45,7 @@ BEGIN
       WHERE (
         "ts"::_rrule.DAY = ANY("rrule"."byday")
       )
-      AND "ts" <= ("dtstart" + INTERVAL '7 days')
+      AND "ts" < ("dtstart" + INTERVAL '7 days')
     ) as "ts"
     UNION
     SELECT "ts" FROM (
@@ -54,7 +54,7 @@ BEGIN
       WHERE (
         EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
       )
-      AND "ts" <= ("dtstart" + INTERVAL '2 months')
+      AND "ts" < ("dtstart" + INTERVAL '1 months')
     ) as "ts"
     UNION
     SELECT "ts" FROM (
