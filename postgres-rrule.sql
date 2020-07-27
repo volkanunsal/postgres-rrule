@@ -188,17 +188,19 @@ DECLARE
 BEGIN
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
+  "nbmonths" AS (SELECT count(*) AS "nbmonths" FROM unnest(("rrule")."bymonth")),
   A10 as (
     SELECT
       make_timestamp(
         "year"."year",
-        COALESCE("bymonth", month),
+        COALESCE(CASE "nbmonths"."nbmonths" WHEN 12 THEN NULL ELSE "bymonth" END, month),
         COALESCE("bymonthday", day),
         COALESCE("byhour", hour),
         COALESCE("byminute", minute),
         COALESCE("bysecond", second)
       ) as "ts"
     FROM "year"
+    LEFT OUTER JOIN "nbmonths" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bymonth") AS "bymonth" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bymonthday") as "bymonthday" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."byhour") AS "byhour" ON (true)
