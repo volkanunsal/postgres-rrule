@@ -1,63 +1,4 @@
-DROP SCHEMA IF EXISTS _rrule CASCADE;
-
-DROP CAST IF EXISTS (_rrule.RRULE AS TEXT);
-DROP CAST IF EXISTS (TEXT AS _rrule.RRULE);
-
-CREATE SCHEMA _rrule;
-
-CREATE TYPE _rrule.FREQ AS ENUM (
-  'YEARLY',
-  'MONTHLY',
-  'WEEKLY',
-  'DAILY'
-);
-
-CREATE TYPE _rrule.DAY AS ENUM (
-  'MO',
-  'TU',
-  'WE',
-  'TH',
-  'FR',
-  'SA',
-  'SU'
-);
-
-
-CREATE TABLE _rrule.RRULE (
-  "freq" _rrule.FREQ NOT NULL,
-  "interval" INTEGER DEFAULT 1 NOT NULL CHECK(0 < "interval"),
-  "count" INTEGER,
-  "until" TIMESTAMP,
-  "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),
-  "byminute" INTEGER[] CHECK (0 <= ALL("byminute") AND 60 > ALL("byminute")),
-  "byhour" INTEGER[] CHECK (0 <= ALL("byhour") AND 24 > ALL("byhour")),
-  "byday" _rrule.DAY[],
-  "bymonthday" INTEGER[] CHECK (31 >= ALL("bymonthday") AND 0 <> ALL("bymonthday") AND -31 <= ALL("bymonthday")),
-  "byyearday" INTEGER[] CHECK (366 >= ALL("byyearday") AND 0 <> ALL("byyearday") AND -366 <= ALL("byyearday")),
-  "byweekno" INTEGER[] CHECK (53 >= ALL("byweekno") AND 0 <> ALL("byweekno") AND -53 <= ALL("byweekno")),
-  "bymonth" INTEGER[] CHECK (0 < ALL("bymonth") AND 12 >= ALL("bymonth")),
-  "bysetpos" INTEGER[] CHECK(366 >= ALL("bysetpos") AND 0 <> ALL("bysetpos") AND -366 <= ALL("bysetpos")),
-  "wkst" _rrule.DAY,
-
-  CONSTRAINT freq_yearly_if_byweekno CHECK("freq" = 'YEARLY' OR "byweekno" IS NULL)
-);
-
-
-CREATE TABLE _rrule.RRULESET (
-  "dtstart" TIMESTAMP NOT NULL,
-  "dtend" TIMESTAMP,
-  "rrule" _rrule.RRULE,
-  "exrule" _rrule.RRULE,
-  "rdate" TIMESTAMP[],
-  "exdate" TIMESTAMP[]
-);
-
-
-CREATE TYPE _rrule.exploded_interval AS (
-  "months" INTEGER,
-  "days" INTEGER,
-  "seconds" INTEGER
-);CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
+CREATE OR REPLACE FUNCTION _rrule.explode_interval(INTERVAL)
 RETURNS _rrule.EXPLODED_INTERVAL AS $$
   SELECT
     (
@@ -446,6 +387,40 @@ BEGIN
   RETURN
     COALESCE('DTSTART:' || TO_CHAR("input"."dtstart", 'YYYYMMDD"T"HH24MISS"Z"') || E'\n', '')
     || COALESCE('DTEND:' || CASE WHEN "input"."dtend" IS NOT NULL THEN TO_CHAR("input"."dtend", 'YYYYMMDD"T"HH24MISS"Z"') ELSE NULL END || E'\n', '')
+    || COALESCE(rrule || E'\n', '')
+    || COALESCE(exrule || E'\n', '')
+    || COALESCE('RDATE:' || _rrule.array_join(l_rdate, ',') || E'\n', '')
+    || COALESCE('EXDATE:' || _rrule.array_join(l_exdate, ',') || E'\n', '');
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+
+CREATE OR REPLACE FUNCTION _rrule.text("input" _rrule.RRULESET, tzid TEXT)
+RETURNS TEXT AS $$
+DECLARE
+  rrule TEXT;
+  exrule TEXT;
+  l_rdate TEXT[];
+  l_exdate TEXT[];
+
+  l_occurrence TIMESTAMPTZ;
+  l_interval INTERVAL;
+BEGIN
+  tzid := 'Europe/Paris';
+  SELECT _rrule.text("input"."rrule")
+  INTO rrule;
+  
+  SELECT timezone('UTC', "input"."dtstart") INTO l_occurrence;
+  SELECT (l_occurrence AT TIME ZONE 'Europe/Paris') - (l_occurrence AT TIME ZONE 'UTC') INTO l_interval;
+
+  SELECT _rrule.text("input"."exrule")
+  INTO exrule;
+  
+  SELECT array_agg(TO_CHAR( rdate + l_interval, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."rdate") as rdate INTO l_rdate;
+  SELECT array_agg(TO_CHAR( exdate+ l_interval, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."exdate") as exdate INTO l_exdate;
+
+  RETURN
+    COALESCE('DTSTART;TZID=' || tzid || ':' || TO_CHAR( timezone('UTC',"input"."dtstart") AT TIME ZONE tzid, 'YYYYMMDD"T"HH24MISS') || E'\n', '')
+    || COALESCE('DTEND:' || CASE WHEN "input"."dtend" IS NOT NULL THEN TO_CHAR("input"."dtend", 'YYYYMMDD"T"HH24MISS') ELSE NULL END || E'\n', '')
     || COALESCE(rrule || E'\n', '')
     || COALESCE(exrule || E'\n', '')
     || COALESCE('RDATE:' || _rrule.array_join(l_rdate, ',') || E'\n', '')
@@ -965,89 +940,3 @@ BEGIN
   RETURN false;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
-CREATE OPERATOR = (
-  LEFTARG = _rrule.RRULE,
-  RIGHTARG = _rrule.RRULE,
-  PROCEDURE = _rrule.compare_equal,
-  NEGATOR = <>,
-  COMMUTATOR = =
-);
-
-CREATE OPERATOR <> (
-  LEFTARG = _rrule.RRULE,
-  RIGHTARG = _rrule.RRULE,
-  PROCEDURE = _rrule.compare_not_equal,
-  NEGATOR = =,
-  COMMUTATOR = <>
-);
-
-CREATE OPERATOR @> (
-  LEFTARG = _rrule.RRULE,
-  RIGHTARG = _rrule.RRULE,
-  PROCEDURE = _rrule.contains,
-  COMMUTATOR = <@
-);
-
-CREATE OPERATOR <@ (
-  LEFTARG = _rrule.RRULE,
-  RIGHTARG = _rrule.RRULE,
-  PROCEDURE = _rrule.contained_by,
-  COMMUTATOR = @>
-);
-
-CREATE OPERATOR @> (
-  LEFTARG = _rrule.RRULESET,
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.contains_timestamp
-);
-
-CREATE OPERATOR @> (
-  LEFTARG = _rrule.RRULESET[],
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.rruleset_array_contains_timestamp
-);
-
-
-CREATE OPERATOR > (
-  LEFTARG = _rrule.RRULESET[],
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.rruleset_array_has_after_timestamp
-);
-
-CREATE OPERATOR < (
-  LEFTARG = _rrule.RRULESET[],
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.rruleset_array_has_before_timestamp
-);
-
-CREATE OPERATOR > (
-  LEFTARG = _rrule.RRULESET,
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.rruleset_has_after_timestamp
-);
-
-CREATE OPERATOR < (
-  LEFTARG = _rrule.RRULESET,
-  RIGHTARG = TIMESTAMP,
-  PROCEDURE = _rrule.rruleset_has_before_timestamp
-);
-
-CREATE CAST (TEXT AS _rrule.RRULE)
-  WITH FUNCTION _rrule.rrule(TEXT)
-  AS IMPLICIT;
-
-
-CREATE CAST (TEXT AS _rrule.RRULESET)
-  WITH FUNCTION _rrule.rruleset(TEXT)
-  AS IMPLICIT;
-
-
-CREATE CAST (jsonb AS _rrule.RRULE)
-  WITH FUNCTION _rrule.jsonb_to_rrule(jsonb)
-  AS IMPLICIT;
-
-
-CREATE CAST (_rrule.RRULE AS jsonb)
-  WITH FUNCTION _rrule.rrule_to_jsonb(_rrule.RRULE)
-  AS IMPLICIT;
-
