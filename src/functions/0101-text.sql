@@ -68,11 +68,11 @@ BEGIN
   SELECT _rrule.text("input"."exrule")
   INTO exrule;
   
-  SELECT array_agg(TO_CHAR( rdate + l_interval, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."rdate") as rdate INTO l_rdate;
-  SELECT array_agg(TO_CHAR( exdate+ l_interval, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."exdate") as exdate INTO l_exdate;
+  SELECT array_agg(TO_CHAR( rdate, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."rdate") as rdate INTO l_rdate;
+  SELECT array_agg(TO_CHAR( exdate, 'YYYYMMDD"T"HH24MISS')) FROM UNNEST("input"."exdate") as exdate INTO l_exdate;
 
   RETURN
-    COALESCE('DTSTART;TZID=' || tzid || ':' || TO_CHAR( timezone('UTC',"input"."dtstart") AT TIME ZONE tzid, 'YYYYMMDD"T"HH24MISS') || E'\n', '')
+    COALESCE('DTSTART;TZID=' || tzid || ':' || TO_CHAR( "input"."dtstart", 'YYYYMMDD"T"HH24MISS') || E'\n', '')
     || COALESCE('DTEND:' || CASE WHEN "input"."dtend" IS NOT NULL THEN TO_CHAR("input"."dtend", 'YYYYMMDD"T"HH24MISS') ELSE NULL END || E'\n', '')
     || COALESCE(rrule || E'\n', '')
     || COALESCE(exrule || E'\n', '')
