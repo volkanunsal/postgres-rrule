@@ -24,6 +24,9 @@ RETURNS SETOF TIMESTAMP AS $$
     SELECT DISTINCT "occurrence"
     FROM "generated"
     WHERE "occurrence" >= "dtstart"
+    AND (
+      $1."bymonth" IS NULL OR EXTRACT(MONTH FROM "occurrence") = ANY($1."bymonth")
+    )
     ORDER BY "occurrence"
   ),
   "tagged" AS (

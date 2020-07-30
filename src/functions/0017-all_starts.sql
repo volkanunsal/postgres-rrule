@@ -5,42 +5,13 @@ CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "dtstart" TIMESTAMP
 ) RETURNS SETOF TIMESTAMP AS $$
 DECLARE
-  months int[];
-  hour int := EXTRACT(HOUR FROM "dtstart")::integer;
-  minute int := EXTRACT(MINUTE FROM "dtstart")::integer;
-  second double precision := EXTRACT(SECOND FROM "dtstart");
-  day int := EXTRACT(DAY FROM "dtstart")::integer;
-  month int := EXTRACT(MONTH FROM "dtstart")::integer;
   year int := EXTRACT(YEAR FROM "dtstart")::integer;
-  year_start timestamp := make_timestamp(year, 1, 1, hour, minute, second);
-  year_end timestamp := make_timestamp(year, 12, 31, hour, minute, second);
-  interv INTERVAL := _rrule.build_interval("rrule");
+  year_end timestamp := make_timestamp(year, 12, 31, 23, 59, 59);
 BEGIN
+
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
-  "nbmonths" AS (SELECT count(*) AS "nbmonths" FROM unnest(("rrule")."bymonth")),
-  A10 as (
-    SELECT
-      make_timestamp(
-        "year"."year",
-        COALESCE(CASE "nbmonths"."nbmonths" WHEN 12 THEN NULL ELSE "bymonth" END, month),
-        COALESCE("bymonthday", day),
-        COALESCE("byhour", hour),
-        COALESCE("byminute", minute),
-        COALESCE("bysecond", second)
-      ) as "ts"
-    FROM "year"
-    LEFT OUTER JOIN "nbmonths" ON (true)
-    LEFT OUTER JOIN unnest(("rrule")."bymonth") AS "bymonth" ON (true)
-    LEFT OUTER JOIN unnest(("rrule")."bymonthday") as "bymonthday" ON (true)
-    LEFT OUTER JOIN unnest(("rrule")."byhour") AS "byhour" ON (true)
-    LEFT OUTER JOIN unnest(("rrule")."byminute") AS "byminute" ON (true)
-    LEFT OUTER JOIN unnest(("rrule")."bysecond") AS "bysecond" ON (true)
-  ),
   A11 as (
-    SELECT DISTINCT "ts"
-    FROM A10
-    UNION
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
@@ -49,35 +20,10 @@ BEGIN
       )
       AND "ts" < ("dtstart" + INTERVAL '7 days')
     ) as "ts"
-    UNION
-    SELECT "ts" FROM (
-      SELECT "ts"
-      FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
-      WHERE (
-        EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
-      )
-      AND "ts" < ("dtstart" + INTERVAL '1 months')
-    ) as "ts"
-    UNION
-    SELECT "ts" FROM (
-      SELECT "ts"
-      FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 month') "ts"
-      WHERE (
-        EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
-      )
-    ) as "ts"
+    
   )
   SELECT DISTINCT "ts"
   FROM A11
-  WHERE (
-    "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
-  )
-  AND (
-    "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
-  )
-  AND (
-    "rrule"."bymonthday" IS NULL OR EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
-  )
   ORDER BY "ts";
 
 END;
