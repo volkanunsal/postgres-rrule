@@ -7,16 +7,16 @@ schema:
 	cat src/schema.sql >> postgres-rrule.sql
 
 types:
-	find src/types -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	find src/types -name \*.sql | sort | xargs -I % cat % >> postgres-rrule.sql
 
 functions:
-	find src/functions -name \*.sql| sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	find src/functions -name \*.sql| sort | xargs -I % cat % >> postgres-rrule.sql
 
 operators:
-	find src/operators -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	find src/operators -name \*.sql | sort | xargs -I % cat % >> postgres-rrule.sql
 
 casts:
-	find src/casts -name \*.sql | sort | xargs -L 1 -J % cat % >> postgres-rrule.sql
+	find src/casts -name \*.sql | sort | xargs -I % cat % >> postgres-rrule.sql
 
 test:
 	psql -c "CREATE EXTENSION IF NOT EXISTS pgtap;" && pg_prove tests/test_*.sql
