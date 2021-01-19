@@ -4,6 +4,8 @@ Parse RRULE statements, and generate occurrences.
 
 ## Install
 
+!! Only the first time... If executed twice, delete ALL the recurrences in the database !!
+
 Execute `postgres-rrule.sql` in your database:
 
 ```
