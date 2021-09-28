@@ -28,7 +28,7 @@ We create a table (in a newly created `_rrule` schema) called `RRULE` to generat
 
 All of the types and functions are created in that schema. You can parse or query `RRULE` specifications.
 
-As a sitenote: The current implementation does not support infinitly reapeating events. Please make sure that you include the `UNTIL` or `COUNT` rrule to check for multiple occurences.
+On a sitenote, the current implementation does not support endlessly reapeating events. Please make sure that you include the `UNTIL` or `COUNT` rrule to check for multiple occurences.
 
 ## Example
 
