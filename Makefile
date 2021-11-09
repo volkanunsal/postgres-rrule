@@ -1,4 +1,7 @@
-TESTS = $(find tests -name test_\*.sql)
+TESTS 		:= $(find tests -name test_\*.sql)
+PGHOST		:= localhost
+PGPASSWORD	:= unsafe
+PGUSER		:= postgres
 
 clean:
 	psql -c "DROP SCHEMA IF EXISTS _rrule CASCADE"
@@ -19,7 +22,7 @@ casts:
 	find src/casts -name \*.sql | sort | xargs -I % cat % >> postgres-rrule.sql
 
 test:
-	psql -c "CREATE EXTENSION IF NOT EXISTS pgtap;" && pg_prove tests/test_*.sql
+	pg_prove tests/test_*.sql
 
 rm_rules:
 	rm -f postgres-rrule.sql
@@ -32,5 +35,3 @@ execute:
 dev: execute
 
 all: compile execute
-
-
