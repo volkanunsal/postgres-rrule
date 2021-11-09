@@ -1,17 +1,51 @@
-# This is a basic workflow to help you get started with Actions
-
 on: pull_request
-name: Pull Request
+
 jobs:
-  test:
-    name: Run tests
+  test-pg:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        pg-version: [11, 12]
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg-version }}
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_PASSWORD: unsafe
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
     steps:
-    - uses: actions/checkout@master
-    - name: Setup perl
-      uses: shogo82148/actions-setup-perl@v1
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Compile Source
+      run: make compile
+    - name: Load Source
+      run: make execute
+      env:
+        PGHOST: postgres
+        PGPASSWORD: unsafe
+        PGUSER: postgres
+    - name: Setup pg_prove on runner
+      run: sudo cpan TAP::Parser::SourceHandler::pgTAP
+      env:
+        SHELL: /bin/bash
+    - name: Setup pgtap on target
+      uses: actions/checkout@v2
       with:
-        perl-version: '5.30'
-    - run: cpan TAP::Parser::SourceHandler::pgTAP
-    - name: Test
-      uses: skx/github-action-tester@master
+        repository: theory/pgtap
+        path: pgtap
+        ref: v1.1.0
+    - name: Install pgtap on target
+      working-directory: pgtap
+      run: make && psql --host localhost --username postgres --dbname postgres --file sql/pgtap.sql
+      env:
+        PGPASSWORD: unsafe
+    - name: Run tests
+      run: make test
+      env:
+        PGHOST: postgres
+        PGPASSWORD: unsafe
+        PGUSER: postgres
