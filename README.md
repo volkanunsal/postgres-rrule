@@ -1,6 +1,8 @@
 # postgres-rrule
 
-Parse RRULE statements, and generate occurrences.
+postgres-rrule is a Postgres extension to make it easier to work with recurring dates in the database.
+
+It parses RRULE statements, and generates occurrences.
 
 ## Install
 
