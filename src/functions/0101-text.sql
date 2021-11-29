@@ -58,12 +58,11 @@ DECLARE
   l_occurrence TIMESTAMPTZ;
   l_interval INTERVAL;
 BEGIN
-  tzid := 'Europe/Paris';
   SELECT _rrule.text("input"."rrule")
   INTO rrule;
   
   SELECT timezone('UTC', "input"."dtstart") INTO l_occurrence;
-  SELECT (l_occurrence AT TIME ZONE 'Europe/Paris') - (l_occurrence AT TIME ZONE 'UTC') INTO l_interval;
+  SELECT (l_occurrence AT TIME ZONE tzid) - (l_occurrence AT TIME ZONE 'UTC') INTO l_interval;
 
   SELECT _rrule.text("input"."exrule")
   INTO exrule;
