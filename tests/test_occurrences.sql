@@ -3,7 +3,7 @@
 
 BEGIN;
 
-SELECT plan(8);
+SELECT plan(12);
 
 SET search_path TO public, _rrule;
 
@@ -18,6 +18,59 @@ SELECT results_eq(
     ('1997-09-016T09:00:00')
   $$,
   'testWeekly'
+);
+
+SELECT results_eq(
+  $$ SELECT * FROM occurrences(
+    'RRULE:FREQ=WEEKLY;COUNT=3;BYDAY=TH'::TEXT,
+    '1997-09-02T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-09-04T09:00:00'::TIMESTAMP),
+    ('1997-09-11T09:00:00'),
+    ('1997-09-18T09:00:00')
+  $$,
+  'testWeeklyByDay'
+);
+
+SELECT results_eq(
+  $$ SELECT * FROM occurrences(
+    'RRULE:FREQ=WEEKLY;COUNT=3;BYDAY=TH;INTERVAL=2'::TEXT,
+    '1997-09-02T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-09-04T09:00:00'::TIMESTAMP),
+    ('1997-09-18T09:00:00'),
+    ('1997-10-02T09:00:00')
+  $$,
+  'testEveryTwoWeeksByDay'
+);
+
+SELECT results_eq(
+  $$ SELECT * FROM occurrences(
+    'RRULE:FREQ=WEEKLY;COUNT=4;BYDAY=TH,SA;INTERVAL=2'::TEXT,
+    '1997-09-02T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-09-04T09:00:00'::TIMESTAMP),
+    ('1997-09-06T09:00:00'),
+    ('1997-09-18T09:00:00'),
+    ('1997-09-20T09:00:00')
+  $$,
+  'testTwiceEveryTwoWeeksByDay'
+);
+
+SELECT results_eq(
+  $$ SELECT * FROM occurrences(
+    'RRULE:FREQ=WEEKLY;COUNT=3;BYDAY=TH;INTERVAL=2'::TEXT,
+    '1997-09-04T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-09-04T09:00:00'::TIMESTAMP),
+    ('1997-09-18T09:00:00'),
+    ('1997-10-02T09:00:00')
+  $$,
+  'testEveryTwoWeeksByDayOnStart'
 );
 
 SELECT results_eq(

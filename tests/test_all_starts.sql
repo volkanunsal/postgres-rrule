@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(6);
+SELECT plan(10);
 
 SET search_path TO public, _rrule;
 
@@ -35,14 +35,63 @@ SELECT results_eq(
 -- 'BYDAY works.'
 SELECT results_eq(
   $$ SELECT _rrule.all_starts(
-    'RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=2'::TEXT,
-    '2019-05-07T09:00:00'::TIMESTAMP
+    'RRULE:FREQ=WEEKLY;BYDAY=WE;COUNT=2'::TEXT,
+    '2019-05-08T09:00:00'::TIMESTAMP
   ) $$,
   $$ VALUES
-    ('2019-05-07T09:00:00'::TIMESTAMP),
-    ('2019-05-014T09:00:00'::TIMESTAMP)
+    ('2019-05-08T09:00:00'::TIMESTAMP)
   $$,
   'BYDAY works.'
+);
+
+-- 'BYDAY works for Sunday.'
+SELECT results_eq(
+  $$ SELECT _rrule.all_starts(
+    'RRULE:FREQ=WEEKLY;BYDAY=SU;COUNT=2'::TEXT,
+    '1997-06-02T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-06-08T09:00:00'::TIMESTAMP)
+  $$,
+  'BYDAY works for last day in week.'
+);
+
+-- 'BYDAY works for multiple days'
+SELECT results_eq(
+  $$ SELECT _rrule.all_starts(
+    'RRULE:FREQ=WEEKLY;BYDAY=MO,WE,SU;COUNT=2'::TEXT,
+    '1997-06-02T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('1997-06-02T09:00:00'::TIMESTAMP),
+    ('1997-06-04T09:00:00'),
+    ('1997-06-08T09:00:00')
+  $$,
+  'BYDAY works for multiple days.'
+);
+
+-- 'BYDAY works when start is on BYDAY'
+SELECT results_eq(
+  $$ SELECT _rrule.all_starts(
+    'RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=2'::TEXT,
+    '2023-07-04T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('2023-07-04T09:00:00'::TIMESTAMP)
+  $$,
+  'BYDAY works when start is on that week day.'
+);
+
+-- 'BYDAY works when start is in previous year'
+SELECT results_eq(
+  $$ SELECT _rrule.all_starts(
+    'RRULE:FREQ=WEEKLY;BYDAY=TH;COUNT=2'::TEXT,
+    '2023-12-29T09:00:00'::TIMESTAMP
+  ) $$,
+  $$ VALUES
+    ('2024-01-04T09:00:00'::TIMESTAMP)
+  $$,
+  'BYDAY works when start is in previous year.'
 );
 
 -- 'Monthly BYMONTH with one value -> one start.'

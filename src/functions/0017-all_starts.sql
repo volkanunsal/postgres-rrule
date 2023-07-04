@@ -11,9 +11,6 @@ DECLARE
   second double precision := EXTRACT(SECOND FROM "dtstart");
   day int := EXTRACT(DAY FROM "dtstart")::integer;
   month int := EXTRACT(MONTH FROM "dtstart")::integer;
-  year int := EXTRACT(YEAR FROM "dtstart")::integer;
-  year_start timestamp := make_timestamp(year, 1, 1, hour, minute, second);
-  year_end timestamp := make_timestamp(year, 12, 31, hour, minute, second);
   interv INTERVAL := _rrule.build_interval("rrule");
 BEGIN
   RETURN QUERY WITH
@@ -41,16 +38,15 @@ BEGIN
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
-      FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
+      FROM generate_series("dtstart", dtstart + INTERVAL '6 days', INTERVAL '1 day') "ts"
       WHERE (
         "ts"::_rrule.DAY = ANY("rrule"."byday")
       )
-      AND "ts" <= ("dtstart" + INTERVAL '7 days')
     ) as "ts"
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
-      FROM generate_series("dtstart", year_end, INTERVAL '1 day') "ts"
+      FROM generate_series("dtstart", "dtstart" + INTERVAL '2 months', INTERVAL '1 day') "ts"
       WHERE (
         EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
       )
