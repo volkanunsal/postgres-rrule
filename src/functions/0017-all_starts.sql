@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "dtstart" TIMESTAMP
 ) RETURNS SETOF TIMESTAMP AS $$
 DECLARE
-  year int := EXTRACT(YEAR FROM "dtstart")::integer;
+  year int := EXTRACT(YEAR FROM _rrule.until($1, $2))::integer;
   year_end timestamp := make_timestamp(year, 12, 31, 23, 59, 59);
 BEGIN
   RETURN QUERY WITH
