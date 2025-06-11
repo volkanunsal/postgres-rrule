@@ -11,14 +11,22 @@ RETURNS SETOF TIMESTAMP AS $$
   "params" AS (
     SELECT
       "until",
-      "interval"
+      "interval",
+      UNNEST(COALESCE("bysetpos", ARRAY[0])) as "bysetpos"
     FROM _rrule.until($1, $2) "until"
     FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
+    FULL OUTER JOIN _rrule.bysetpos($1) "bysetpos" ON (true)
   ),
   "generated" AS (
-    SELECT generate_series("start", "until", "interval") "occurrence"
-    FROM "params"
-    FULL OUTER JOIN "starts" ON (true)
+     SELECT generate_series("start", "until", "interval") "occurrence"
+     FROM "params"
+     FULL OUTER JOIN "starts" ON (true)
+     WHERE ($1."bysetpos" IS  NULL)
+   UNION ALL
+     SELECT "start" + ("bysetpos" - 1) * interval '1 week' "occurrence"
+     FROM "params"
+     FULL OUTER JOIN "starts" ON (true)
+     WHERE ($1."bysetpos" IS NOT NULL)
   ),
   "ordered" AS (
     SELECT DISTINCT "occurrence"
