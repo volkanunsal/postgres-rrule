@@ -28,3 +28,5 @@ Temporary Items
 
 # Mercurial
 .hg
+
+postgres-rrule.sql
