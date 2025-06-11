@@ -1,5 +1,7 @@
 # postgres-rrule
 
+> MAINTENANCE MODE: This repo is in maintenance mode because I don't have time to devote to it any longer. 
+
 postgres-rrule is a Postgres extension to make it easier to work with recurring dates in the database.
 
 It parses RRULE statements, and generates occurrences.
