@@ -131,7 +131,7 @@ Now you can run the tests with
 
 ## Prior Art
 
-This is a fork of Matthew Schinckel's [original repo](https://bitbucket.org/schinckel/postgres-rrule).
+[Matthew Schinckel](https://bitbucket.org/schinckel/postgres-rrule).
 
 ## License
 
