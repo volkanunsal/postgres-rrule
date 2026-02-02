@@ -1,4 +1,24 @@
--- For example, a YEARLY rule that repeats on first and third month have 2 start values.
+-- Computes all possible starting timestamps for a recurrence rule within its first cycle.
+--
+-- This function determines the "seed" timestamps from which occurrences are generated.
+-- For example, a YEARLY rule with BYMONTH=[1,3] has 2 start values (January 1 and March 1).
+--
+-- Algorithm:
+-- 1. Extract time components from dtstart (hour, minute, second, day, month)
+-- 2. Generate candidate timestamps by combining:
+--    a. BY* parameters (bymonth, bymonthday, byhour, byminute, bysecond)
+--    b. Day-of-week constraints (byday) matched within date ranges
+-- 3. Filter candidates to ensure they satisfy ALL applicable BY* constraints
+-- 4. Return distinct timestamps sorted chronologically
+--
+-- The function uses UNION to combine three potential sources of timestamps:
+-- - Cartesian product of all BY* time parameters
+-- - Day-of-week matches within a week window (for byday)
+-- - Month-day matches within a 2-month window (for bymonthday)
+-- - Month matches within a year window (for bymonth)
+--
+-- Performance optimization: NULL checks prevent unnecessary generate_series calls
+-- when the corresponding BY* parameter is not specified.
 
 CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "rrule" _rrule.RRULE,

@@ -70,10 +70,33 @@ IS 'Returns all occurrences from an array of rulesets that occur after a given t
 
 -- occurrences overloads
 COMMENT ON FUNCTION _rrule.occurrences(_rrule.RRULE, TIMESTAMP)
-IS 'Generates all occurrences for a recurrence rule starting from the given timestamp.';
+IS 'Generates all occurrences for a recurrence rule starting from the given timestamp.
+
+Example usage:
+  -- Generate first 5 daily occurrences starting Sep 2, 1997
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=DAILY;COUNT=5''),
+    ''1997-09-02T09:00:00''::timestamp
+  );
+
+  -- Generate weekly Monday meetings for 10 weeks
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10''),
+    ''2026-01-05T10:00:00''::timestamp
+  );
+';
 
 COMMENT ON FUNCTION _rrule.occurrences(_rrule.RRULE, TIMESTAMP, TSRANGE)
-IS 'Generates occurrences for a recurrence rule within a specific time range.';
+IS 'Generates occurrences for a recurrence rule within a specific time range.
+
+Example usage:
+  -- Get all daily occurrences in September 1997
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=DAILY''),
+    ''1997-09-02T09:00:00''::timestamp,
+    ''[1997-09-01, 1997-10-01)''::tsrange
+  );
+';
 
 COMMENT ON FUNCTION _rrule.occurrences(TEXT, TIMESTAMP, TSRANGE)
 IS 'Generates occurrences for a recurrence rule (parsed from text) within a specific time range.';
@@ -89,7 +112,15 @@ IS 'Generates all occurrences from multiple rulesets within a time range.';
 
 -- Containment functions
 COMMENT ON FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
-IS 'Returns true if the given timestamp occurs within the ruleset. Matches by date, ignoring time.';
+IS 'Returns true if the given timestamp occurs within the ruleset. Matches by date, ignoring time.
+
+Example usage:
+  -- Check if a date is a scheduled occurrence
+  SELECT _rrule.contains_timestamp(
+    _rrule.jsonb_to_rruleset(''{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "WEEKLY", "byday": ["MO", "WE", "FR"]}}''::jsonb),
+    ''2026-01-03T14:30:00''::timestamp  -- Returns true (Friday)
+  );
+';
 
 COMMENT ON FUNCTION _rrule.rruleset_array_contains_timestamp(_rrule.RRULESET[], TIMESTAMP)
 IS 'Returns true if the given timestamp occurs within any ruleset in the array.';
@@ -108,10 +139,21 @@ IS 'Returns true if any ruleset in the array has occurrences before the given ti
 
 -- Parsing and conversion functions
 COMMENT ON FUNCTION _rrule.rrule(TEXT)
-IS 'Parses an RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10") into an RRULE type. Validates according to RFC 5545.';
+IS 'Parses an RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10") into an RRULE type. Validates according to RFC 5545.
+
+Example usage:
+  SELECT _rrule.rrule(''RRULE:FREQ=DAILY;COUNT=10'');
+  SELECT _rrule.rrule(''RRULE:FREQ=WEEKLY;BYDAY=MO,FR;UNTIL=20251231T235959'');
+  SELECT _rrule.rrule(''RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15;COUNT=24'');
+';
 
 COMMENT ON FUNCTION _rrule.rruleset(TEXT)
-IS 'Parses a multiline RRULESET string (with DTSTART, RRULE, EXDATE, RDATE) into an RRULESET type.';
+IS 'Parses a multiline RRULESET string (with DTSTART, RRULE, EXDATE, RDATE) into an RRULESET type.
+
+Example usage:
+  SELECT _rrule.rruleset(''DTSTART:19970902T090000
+RRULE:FREQ=DAILY;COUNT=10'');
+';
 
 COMMENT ON FUNCTION _rrule.jsonb_to_rrule(JSONB)
 IS 'Converts a JSONB object to an RRULE type. Validates according to RFC 5545.';

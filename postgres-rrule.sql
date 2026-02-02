@@ -5,6 +5,29 @@ DROP CAST IF EXISTS (TEXT AS _rrule.RRULE);
 
 CREATE SCHEMA _rrule;
 
+COMMENT ON SCHEMA _rrule IS
+'PostgreSQL implementation of RFC 5545 recurrence rules (RRULE).
+
+This schema provides types and functions for working with iCalendar recurrence rules,
+allowing complex recurring event patterns to be stored and queried efficiently.
+
+Main types:
+- RRULE: Single recurrence rule with frequency, interval, and BY* constraints
+- RRULESET: Collection of rules with DTSTART, DTEND, RDATE, and EXDATE
+- FREQ: Enumeration of recurrence frequencies (YEARLY, MONTHLY, WEEKLY, DAILY)
+- DAY: Enumeration of weekdays (MO, TU, WE, TH, FR, SA, SU)
+
+Key functions:
+- rrule(TEXT): Parse RRULE string into RRULE type
+- occurrences(): Generate timestamps for recurring events
+- is_finite(): Check if recurrence has a defined end
+- first(), last(), before(), after(): Query occurrence boundaries
+- contains_timestamp(): Check if timestamp matches recurrence pattern
+- jsonb_to_rrule(), rrule_to_jsonb(): Convert between RRULE and JSONB
+
+For more information, see: https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.10
+';
+
 CREATE TYPE _rrule.FREQ AS ENUM (
   'YEARLY',
   'MONTHLY',
@@ -26,19 +49,25 @@ CREATE TYPE _rrule.DAY AS ENUM (
 CREATE TABLE _rrule.RRULE (
   "freq" _rrule.FREQ NOT NULL,
   "interval" INTEGER DEFAULT 1 NOT NULL CHECK(0 < "interval"),
-  "count" INTEGER,
-  "until" TIMESTAMP,
-  "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),
-  "byminute" INTEGER[] CHECK (0 <= ALL("byminute") AND 60 > ALL("byminute")),
-  "byhour" INTEGER[] CHECK (0 <= ALL("byhour") AND 24 > ALL("byhour")),
-  "byday" _rrule.DAY[],
-  "bymonthday" INTEGER[] CHECK (31 >= ALL("bymonthday") AND 0 <> ALL("bymonthday") AND -31 <= ALL("bymonthday")),
-  "byyearday" INTEGER[] CHECK (366 >= ALL("byyearday") AND 0 <> ALL("byyearday") AND -366 <= ALL("byyearday")),
-  "byweekno" INTEGER[] CHECK (53 >= ALL("byweekno") AND 0 <> ALL("byweekno") AND -53 <= ALL("byweekno")),
-  "bymonth" INTEGER[] CHECK (0 < ALL("bymonth") AND 12 >= ALL("bymonth")),
-  "bysetpos" INTEGER[] CHECK(366 >= ALL("bysetpos") AND 0 <> ALL("bysetpos") AND -366 <= ALL("bysetpos")),
-  "wkst" _rrule.DAY,
+  "count" INTEGER,  -- Number of occurrences to generate (RFC 5545: positive integer)
+  "until" TIMESTAMP,  -- End date for recurrence (RFC 5545: cannot coexist with COUNT)
 
+  -- Time component constraints (RFC 5545 section 3.3.10)
+  "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),  -- 0-59 (60 for leap second)
+  "byminute" INTEGER[] CHECK (0 <= ALL("byminute") AND 60 > ALL("byminute")),  -- 0-59
+  "byhour" INTEGER[] CHECK (0 <= ALL("byhour") AND 24 > ALL("byhour")),        -- 0-23
+  "byday" _rrule.DAY[],  -- MO, TU, WE, TH, FR, SA, SU (optionally prefixed with ordinal)
+
+  -- Date component constraints (RFC 5545 section 3.3.10)
+  "bymonthday" INTEGER[] CHECK (31 >= ALL("bymonthday") AND 0 <> ALL("bymonthday") AND -31 <= ALL("bymonthday")),  -- 1-31 or -31 to -1 (negative counts from end)
+  "byyearday" INTEGER[] CHECK (366 >= ALL("byyearday") AND 0 <> ALL("byyearday") AND -366 <= ALL("byyearday")),    -- 1-366 or -366 to -1 (leap year aware)
+  "byweekno" INTEGER[] CHECK (53 >= ALL("byweekno") AND 0 <> ALL("byweekno") AND -53 <= ALL("byweekno")),          -- 1-53 or -53 to -1 (ISO week numbers)
+  "bymonth" INTEGER[] CHECK (0 < ALL("bymonth") AND 12 >= ALL("bymonth")),     -- 1-12 (January through December)
+  "bysetpos" INTEGER[] CHECK(366 >= ALL("bysetpos") AND 0 <> ALL("bysetpos") AND -366 <= ALL("bysetpos")),         -- Position in occurrence set
+
+  "wkst" _rrule.DAY,  -- Week start day (RFC 5545 default: MO)
+
+  -- RFC 5545: BYWEEKNO is only valid for YEARLY frequency
   CONSTRAINT freq_yearly_if_byweekno CHECK("freq" = 'YEARLY' OR "byweekno" IS NULL)
 );
 
@@ -231,7 +260,27 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.until(_rrule.RRULE, TIMESTAMP) IS 'The calculated "until"" timestamp for the given rrule+dtstart';
 
--- For example, a YEARLY rule that repeats on first and third month have 2 start values.
+-- Computes all possible starting timestamps for a recurrence rule within its first cycle.
+--
+-- This function determines the "seed" timestamps from which occurrences are generated.
+-- For example, a YEARLY rule with BYMONTH=[1,3] has 2 start values (January 1 and March 1).
+--
+-- Algorithm:
+-- 1. Extract time components from dtstart (hour, minute, second, day, month)
+-- 2. Generate candidate timestamps by combining:
+--    a. BY* parameters (bymonth, bymonthday, byhour, byminute, bysecond)
+--    b. Day-of-week constraints (byday) matched within date ranges
+-- 3. Filter candidates to ensure they satisfy ALL applicable BY* constraints
+-- 4. Return distinct timestamps sorted chronologically
+--
+-- The function uses UNION to combine three potential sources of timestamps:
+-- - Cartesian product of all BY* time parameters
+-- - Day-of-week matches within a week window (for byday)
+-- - Month-day matches within a 2-month window (for bymonthday)
+-- - Month matches within a year window (for bymonth)
+--
+-- Performance optimization: NULL checks prevent unnecessary generate_series calls
+-- when the corresponding BY* parameter is not specified.
 
 CREATE OR REPLACE FUNCTION _rrule.all_starts(
   "rrule" _rrule.RRULE,
@@ -1024,10 +1073,33 @@ IS 'Returns all occurrences from an array of rulesets that occur after a given t
 
 -- occurrences overloads
 COMMENT ON FUNCTION _rrule.occurrences(_rrule.RRULE, TIMESTAMP)
-IS 'Generates all occurrences for a recurrence rule starting from the given timestamp.';
+IS 'Generates all occurrences for a recurrence rule starting from the given timestamp.
+
+Example usage:
+  -- Generate first 5 daily occurrences starting Sep 2, 1997
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=DAILY;COUNT=5''),
+    ''1997-09-02T09:00:00''::timestamp
+  );
+
+  -- Generate weekly Monday meetings for 10 weeks
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=10''),
+    ''2026-01-05T10:00:00''::timestamp
+  );
+';
 
 COMMENT ON FUNCTION _rrule.occurrences(_rrule.RRULE, TIMESTAMP, TSRANGE)
-IS 'Generates occurrences for a recurrence rule within a specific time range.';
+IS 'Generates occurrences for a recurrence rule within a specific time range.
+
+Example usage:
+  -- Get all daily occurrences in September 1997
+  SELECT occurrence FROM _rrule.occurrences(
+    _rrule.rrule(''RRULE:FREQ=DAILY''),
+    ''1997-09-02T09:00:00''::timestamp,
+    ''[1997-09-01, 1997-10-01)''::tsrange
+  );
+';
 
 COMMENT ON FUNCTION _rrule.occurrences(TEXT, TIMESTAMP, TSRANGE)
 IS 'Generates occurrences for a recurrence rule (parsed from text) within a specific time range.';
@@ -1043,7 +1115,15 @@ IS 'Generates all occurrences from multiple rulesets within a time range.';
 
 -- Containment functions
 COMMENT ON FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
-IS 'Returns true if the given timestamp occurs within the ruleset. Matches by date, ignoring time.';
+IS 'Returns true if the given timestamp occurs within the ruleset. Matches by date, ignoring time.
+
+Example usage:
+  -- Check if a date is a scheduled occurrence
+  SELECT _rrule.contains_timestamp(
+    _rrule.jsonb_to_rruleset(''{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "WEEKLY", "byday": ["MO", "WE", "FR"]}}''::jsonb),
+    ''2026-01-03T14:30:00''::timestamp  -- Returns true (Friday)
+  );
+';
 
 COMMENT ON FUNCTION _rrule.rruleset_array_contains_timestamp(_rrule.RRULESET[], TIMESTAMP)
 IS 'Returns true if the given timestamp occurs within any ruleset in the array.';
@@ -1062,10 +1142,21 @@ IS 'Returns true if any ruleset in the array has occurrences before the given ti
 
 -- Parsing and conversion functions
 COMMENT ON FUNCTION _rrule.rrule(TEXT)
-IS 'Parses an RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10") into an RRULE type. Validates according to RFC 5545.';
+IS 'Parses an RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10") into an RRULE type. Validates according to RFC 5545.
+
+Example usage:
+  SELECT _rrule.rrule(''RRULE:FREQ=DAILY;COUNT=10'');
+  SELECT _rrule.rrule(''RRULE:FREQ=WEEKLY;BYDAY=MO,FR;UNTIL=20251231T235959'');
+  SELECT _rrule.rrule(''RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15;COUNT=24'');
+';
 
 COMMENT ON FUNCTION _rrule.rruleset(TEXT)
-IS 'Parses a multiline RRULESET string (with DTSTART, RRULE, EXDATE, RDATE) into an RRULESET type.';
+IS 'Parses a multiline RRULESET string (with DTSTART, RRULE, EXDATE, RDATE) into an RRULESET type.
+
+Example usage:
+  SELECT _rrule.rruleset(''DTSTART:19970902T090000
+RRULE:FREQ=DAILY;COUNT=10'');
+';
 
 COMMENT ON FUNCTION _rrule.jsonb_to_rrule(JSONB)
 IS 'Converts a JSONB object to an RRULE type. Validates according to RFC 5545.';
