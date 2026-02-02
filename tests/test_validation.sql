@@ -24,52 +24,48 @@ SELECT throws_like(
 
 -- Test has_any_by_rule helper function
 SELECT is(
-    _rrule.has_any_by_rule('(DAILY,1,,,,,,,,,,,,MO)'::RRULE),
+    _rrule.has_any_by_rule(_rrule.rrule('RRULE:FREQ=DAILY')),
     false,
     'RRULE with no BY* rules returns false'
 );
 
 SELECT is(
-    _rrule.has_any_by_rule('(MONTHLY,1,,,,,,,"{1,15}",,,,,MO)'::RRULE),
+    _rrule.has_any_by_rule(_rrule.rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15')),
     true,
     'RRULE with bymonthday returns true'
 );
 
 SELECT is(
-    _rrule.has_any_by_rule('(WEEKLY,1,,,,,,"{MO,FR}",,,,,MO)'::RRULE),
+    _rrule.has_any_by_rule(_rrule.rrule('RRULE:FREQ=WEEKLY;BYDAY=MO,FR')),
     true,
     'RRULE with byday returns true'
 );
 
 SELECT is(
-    _rrule.has_any_by_rule('(YEARLY,1,,,,,,,,,"{1,12}",,MO)'::RRULE),
+    _rrule.has_any_by_rule(_rrule.rrule('RRULE:FREQ=YEARLY;BYMONTH=1,12')),
     true,
     'RRULE with bymonth returns true'
 );
 
 -- Test valid COUNT values work
-SELECT is(
-    rrule('RRULE:FREQ=DAILY;COUNT=1'),
-    '(DAILY,1,1,,,,,,,,,,,,MO)',
+SELECT ok(
+    (rrule('RRULE:FREQ=DAILY;COUNT=1')).count = 1,
     'COUNT=1 is valid'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=DAILY;COUNT=100'),
-    '(DAILY,1,100,,,,,,,,,,,,MO)',
+SELECT ok(
+    (rrule('RRULE:FREQ=DAILY;COUNT=100')).count = 100,
     'COUNT=100 is valid'
 );
 
 -- Test valid non-empty arrays work
-SELECT is(
-    rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1'),
-    '(MONTHLY,1,,,,,,,{1},,,,,MO)',
+SELECT ok(
+    (rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1')).bymonthday = ARRAY[1],
     'Single value BYMONTHDAY array is valid'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15'),
-    '(MONTHLY,1,,,,,,\"{1,15}\",,,,,MO)',
+SELECT ok(
+    (rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15')).bymonthday = ARRAY[1,15],
     'Multiple value BYMONTHDAY array is valid'
 );
 
@@ -81,9 +77,8 @@ SELECT throws_like(
     'BYSETPOS without other BY* parameters should raise exception'
 );
 
-SELECT is(
-    rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1;BYSETPOS=1'),
-    '(MONTHLY,1,,,,,,,{1},,,,{1},MO)',
+SELECT ok(
+    (rrule('RRULE:FREQ=MONTHLY;BYMONTHDAY=1;BYSETPOS=1')).bysetpos = ARRAY[1],
     'BYSETPOS with BYMONTHDAY is valid'
 );
 

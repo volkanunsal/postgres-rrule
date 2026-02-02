@@ -27,8 +27,8 @@ SELECT is(
     '(YEARLY,1,,,,,,,,,,,,MO)'::RRULE,
     '1901-01-01 00:00:00'::TIMESTAMP
   ),
-  '1902-01-01 00:00:00'::TIMESTAMP,
-  'No until or count.'
+  '9999-12-31 23:59:59'::TIMESTAMP,
+  'No until or count returns far-future date for infinite recurrence.'
 );
 
 SELECT is(

@@ -262,11 +262,15 @@ RETURNS BOOLEAN AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.until("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
-  SELECT min("until")
+  SELECT COALESCE(
+    min("until"),
+    '9999-12-31 23:59:59'::TIMESTAMP
+  )
   FROM (
     SELECT "rrule"."until"
     UNION
-    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * COALESCE("rrule"."count", CASE WHEN "rrule"."until" IS NOT NULL THEN NULL ELSE 1 END) AS "until"
+    SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * "rrule"."count" AS "until"
+    WHERE "rrule"."count" IS NOT NULL
   ) "until" GROUP BY ();
 
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;

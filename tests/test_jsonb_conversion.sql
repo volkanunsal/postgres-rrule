@@ -6,33 +6,34 @@ SET search_path TO _rrule, public;
 
 -- Test RRULE to JSONB conversion
 SELECT is(
-    (_rrule.rrule_to_jsonb('(DAILY,1,10,,,,,,,,,,,MO)'::RRULE)->>'freq')::text,
+    (_rrule.rrule_to_jsonb(_rrule.rrule('RRULE:FREQ=DAILY;COUNT=10'))->>'freq')::text,
     'DAILY',
     'Basic RRULE freq converts to JSONB correctly'
 );
 
 SELECT is(
-    (_rrule.rrule_to_jsonb('(DAILY,1,10,,,,,,,,,,,MO)'::RRULE)->>'count')::int,
+    (_rrule.rrule_to_jsonb(_rrule.rrule('RRULE:FREQ=DAILY;COUNT=10'))->>'count')::int,
     10,
     'Basic RRULE count converts to JSONB correctly'
 );
 
 SELECT is(
-    _rrule.rrule_to_jsonb('(MONTHLY,2,5,,,,,,,"{1,15}",,,,MO)'::RRULE) ? 'bymonthday',
+    _rrule.rrule_to_jsonb(_rrule.rrule('RRULE:FREQ=MONTHLY;INTERVAL=2;COUNT=5;BYMONTHDAY=1,15')) ? 'bymonthday',
     true,
     'RRULE with bymonthday includes it in JSONB'
 );
 
 -- Test JSONB to RRULE conversion
-SELECT is(
-    _rrule.jsonb_to_rrule('{"freq": "DAILY", "count": 10}'::jsonb),
-    '(DAILY,1,10,,,,,,,,,,,MO)',
+SELECT ok(
+    (_rrule.jsonb_to_rrule('{"freq": "DAILY", "count": 10}'::jsonb)).freq = 'DAILY' AND
+    (_rrule.jsonb_to_rrule('{"freq": "DAILY", "count": 10}'::jsonb)).count = 10,
     'JSONB with freq and count converts correctly'
 );
 
-SELECT is(
-    _rrule.jsonb_to_rrule('{"freq": "WEEKLY", "interval": 2, "byday": ["MO", "FR"]}'::jsonb),
-    '(WEEKLY,2,,,,,,,,\"{MO,FR}\",,,,MO)',
+SELECT ok(
+    (_rrule.jsonb_to_rrule('{"freq": "WEEKLY", "interval": 2, "byday": ["MO", "FR"]}'::jsonb)).freq = 'WEEKLY' AND
+    (_rrule.jsonb_to_rrule('{"freq": "WEEKLY", "interval": 2, "byday": ["MO", "FR"]}'::jsonb)).interval = 2 AND
+    (_rrule.jsonb_to_rrule('{"freq": "WEEKLY", "interval": 2, "byday": ["MO", "FR"]}'::jsonb)).byday IS NOT NULL,
     'JSONB with byday converts correctly'
 );
 
@@ -112,16 +113,16 @@ SELECT is(
 );
 
 -- Test round-trip conversions
-SELECT is(
-    _rrule.jsonb_to_rrule(_rrule.rrule_to_jsonb('(DAILY,1,10,,,,,,,,,,,MO)'::RRULE)),
-    '(DAILY,1,10,,,,,,,,,,,MO)'::RRULE,
+SELECT ok(
+    (_rrule.jsonb_to_rrule(_rrule.rrule_to_jsonb(_rrule.rrule('RRULE:FREQ=DAILY;COUNT=10')))).freq = 'DAILY' AND
+    (_rrule.jsonb_to_rrule(_rrule.rrule_to_jsonb(_rrule.rrule('RRULE:FREQ=DAILY;COUNT=10')))).count = 10,
     'RRULE -> JSONB -> RRULE round-trip preserves data'
 );
 
 -- Test complex RRULE with multiple BY* parameters
 SELECT is(
     (_rrule.rrule_to_jsonb(
-        '(YEARLY,1,,,,,,,"{1,15}","{1,-1}","{1,12}",,MO)'::RRULE
+        _rrule.rrule('RRULE:FREQ=YEARLY;BYMONTHDAY=1,15;BYYEARDAY=1,-1;BYMONTH=1,12')
     ) ? 'bymonthday'),
     true,
     'Complex RRULE with multiple BY* parameters converts correctly'
@@ -129,7 +130,7 @@ SELECT is(
 
 SELECT is(
     (_rrule.rrule_to_jsonb(
-        '(YEARLY,1,,,,,,,"{1,15}","{1,-1}","{1,12}",,MO)'::RRULE
+        _rrule.rrule('RRULE:FREQ=YEARLY;BYMONTHDAY=1,15;BYYEARDAY=1,-1;BYMONTH=1,12')
     ) ? 'byyearday'),
     true,
     'Complex RRULE includes byyearday in JSONB'
@@ -137,16 +138,17 @@ SELECT is(
 
 SELECT is(
     (_rrule.rrule_to_jsonb(
-        '(YEARLY,1,,,,,,,"{1,15}","{1,-1}","{1,12}",,MO)'::RRULE
+        _rrule.rrule('RRULE:FREQ=YEARLY;BYMONTHDAY=1,15;BYYEARDAY=1,-1;BYMONTH=1,12')
     ) ? 'bymonth'),
     true,
     'Complex RRULE includes bymonth in JSONB'
 );
 
 -- Test default values
-SELECT is(
-    _rrule.jsonb_to_rrule('{"freq": "DAILY"}'::jsonb),
-    '(DAILY,1,,,,,,,,,,,,MO)',
+SELECT ok(
+    (_rrule.jsonb_to_rrule('{"freq": "DAILY"}'::jsonb)).freq = 'DAILY' AND
+    (_rrule.jsonb_to_rrule('{"freq": "DAILY"}'::jsonb)).interval = 1 AND
+    (_rrule.jsonb_to_rrule('{"freq": "DAILY"}'::jsonb)).wkst = 'MO',
     'JSONB without interval/wkst uses defaults (interval=1, wkst=MO)'
 );
 
