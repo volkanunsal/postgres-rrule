@@ -119,6 +119,9 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Generates all occurrences for a ruleset (unbounded time range).
 --
+-- Note: DTEND in RFC 5545 defines the duration of each individual occurrence,
+-- NOT the end of the recurrence series. Use UNTIL or COUNT in the RRULE to limit occurrences.
+--
 -- Parameters:
 --   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
 --
