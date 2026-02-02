@@ -218,10 +218,22 @@ RETURNS BOOLEAN AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.build_interval("interval" INTEGER, "freq" _rrule.FREQ)
 RETURNS INTERVAL AS $$
+DECLARE
+  result INTERVAL;
+BEGIN
+  -- Validate interval to prevent overflow (PostgreSQL supports intervals up to ~178M years)
+  -- For practical RRULE usage, limit to 1 million to prevent arithmetic issues
+  IF "interval" < 1 OR "interval" > 1000000 THEN
+    RAISE EXCEPTION 'INTERVAL value % is out of valid range (1 to 1,000,000).', "interval";
+  END IF;
+
   -- Transform ical time interval enums into Postgres intervals, e.g.
   -- "WEEKLY" becomes "WEEKS".
-  SELECT ("interval" || ' ' || regexp_replace(regexp_replace("freq"::TEXT, 'LY', 'S'), 'IS', 'YS'))::INTERVAL;
-$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+  result := ("interval" || ' ' || regexp_replace(regexp_replace("freq"::TEXT, 'LY', 'S'), 'IS', 'YS'))::INTERVAL;
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
@@ -466,6 +478,7 @@ CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
+  v_until_text text;
 BEGIN
   WITH "tokens" AS (
     WITH parsed_line as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
@@ -478,7 +491,7 @@ BEGIN
       (SELECT "val"::_rrule.FREQ FROM "tokens" WHERE "key" = 'FREQ') AS "freq",
       (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'INTERVAL') AS "interval",
       (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'COUNT') AS "count",
-      (SELECT "val"::TIMESTAMP FROM "tokens" WHERE "key" = 'UNTIL') AS "until",
+      (SELECT "val" FROM "tokens" WHERE "key" = 'UNTIL') AS "until_val",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYHOUR') AS "byhour",
@@ -495,7 +508,7 @@ BEGIN
     -- Default value for INTERVAL
     COALESCE("interval", 1) AS "interval",
     "count",
-    "until",
+    "until_val",
     "bysecond",
     "byminute",
     "byhour",
@@ -507,8 +520,20 @@ BEGIN
     "bysetpos",
     -- DEFAULT value for wkst
     COALESCE("wkst", 'MO') AS "wkst"
-  INTO result
+  INTO result."freq", result."interval", result."count", v_until_text,
+       result."bysecond", result."byminute", result."byhour", result."byday",
+       result."bymonthday", result."byyearday", result."byweekno", result."bymonth",
+       result."bysetpos", result."wkst"
   FROM candidate;
+
+  -- Parse UNTIL with better error handling
+  IF v_until_text IS NOT NULL THEN
+    BEGIN
+      result."until" := v_until_text::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid UNTIL timestamp format: "%". Expected format: YYYYMMDDTHHMMSS', v_until_text;
+    END;
+  END IF;
 
   PERFORM _rrule.validate_rrule(result);
 
@@ -538,6 +563,7 @@ RETURNS TEXT AS $$
   , ';$', '');
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- Parses a multiline RRULESET string into an RRULESET type.
+-- Includes validation for better error messages on invalid timestamp formats.
 --
 -- Parameters:
 --   text - Multiline string with DTSTART, RRULE, EXRULE, RDATE, EXDATE lines
@@ -547,19 +573,65 @@ $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- Returns: RRULESET type with parsed DTSTART, RRULE, and optional DTEND, EXRULE, RDATE, EXDATE
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
-  WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),
-  "dtend-line" AS (SELECT _rrule.parse_line($1::text, 'DTEND') as "x"),
-  "exrule-line" AS (SELECT _rrule.parse_line($1::text, 'EXRULE') as "x"),
-  "rdate-line" AS (SELECT _rrule.parse_line($1::text, 'RDATE') as "x"),
-  "exdate-line" AS (SELECT _rrule.parse_line($1::text, 'EXDATE') as "x")
-  SELECT
-    (SELECT "x"::timestamp FROM "dtstart-line" LIMIT 1) AS "dtstart",
-    (SELECT "x"::timestamp FROM "dtend-line" LIMIT 1) AS "dtend",
-    (SELECT _rrule.rrule($1::text) "rrule") as "rrule",
-    (SELECT _rrule.rrule("x"::text) "rrule" FROM "exrule-line") as "exrule",
-    (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "rdate-line" AS "rdate"),
-    (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "exdate-line" AS "exdate");
-$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+DECLARE
+  result _rrule.RRULESET;
+  dtstart_text text;
+  dtend_text text;
+  rdate_text text;
+  exdate_text text;
+BEGIN
+  -- Extract line values
+  dtstart_text := _rrule.parse_line($1, 'DTSTART');
+  dtend_text := _rrule.parse_line($1, 'DTEND');
+  rdate_text := _rrule.parse_line($1, 'RDATE');
+  exdate_text := _rrule.parse_line($1, 'EXDATE');
+
+  -- Parse DTSTART with error handling
+  IF dtstart_text IS NOT NULL THEN
+    BEGIN
+      result."dtstart" := dtstart_text::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid DTSTART format: "%". Expected format: DTSTART:YYYYMMDDTHHMMSS', dtstart_text;
+    END;
+  END IF;
+
+  -- Parse DTEND with error handling
+  IF dtend_text IS NOT NULL THEN
+    BEGIN
+      result."dtend" := dtend_text::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid DTEND format: "%". Expected format: DTEND:YYYYMMDDTHHMMSS', dtend_text;
+    END;
+  END IF;
+
+  -- Parse RRULE and EXRULE
+  result."rrule" := _rrule.rrule($1);
+
+  IF _rrule.parse_line($1, 'EXRULE') IS NOT NULL THEN
+    result."exrule" := _rrule.rrule(_rrule.parse_line($1, 'EXRULE'));
+  END IF;
+
+  -- Parse RDATE array with error handling
+  IF rdate_text IS NOT NULL THEN
+    BEGIN
+      result."rdate" := (regexp_split_to_array(rdate_text, ','))::TIMESTAMP[];
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid RDATE format: "%". Expected comma-separated timestamps.', rdate_text;
+    END;
+  END IF;
+
+  -- Parse EXDATE array with error handling
+  IF exdate_text IS NOT NULL THEN
+    BEGIN
+      result."exdate" := (regexp_split_to_array(exdate_text, ','))::TIMESTAMP[];
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid EXDATE format: "%". Expected comma-separated timestamps.', exdate_text;
+    END;
+  END IF;
+
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 -- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
@@ -740,6 +812,7 @@ RETURNS SETOF TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Generates all occurrences from multiple rulesets within a time range.
+-- Rewritten to eliminate dynamic SQL for better security and maintainability.
 --
 -- Parameters:
 --   rruleset_array - Array of rulesets to combine
@@ -751,29 +824,11 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-DECLARE
-  i int;
-  lim int;
-  q text := '';
-BEGIN
-  lim := array_length("rruleset_array", 1);
-
-  IF lim IS NULL THEN
-    q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
-  ELSE
-    FOR i IN 1..lim
-    LOOP
-      q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
-      IF i != lim THEN
-        q := q || ' UNION ';
-      END IF;
-    END LOOP;
-    q := q || ' ORDER BY occurrences ASC';
-  END IF;
-
-  RETURN QUERY EXECUTE q;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;-- Returns the first occurrence of a recurrence rule.
+  SELECT DISTINCT occurrence
+  FROM unnest("rruleset_array") AS rruleset,
+       LATERAL _rrule.occurrences(rruleset, "tsrange") AS occurrence
+  ORDER BY occurrence;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;-- Returns the first occurrence of a recurrence rule.
 --
 -- Parameters:
 --   rrule   - The recurrence rule defining the pattern
@@ -1097,15 +1152,20 @@ CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE
   result _rrule.RRULESET;
+  dtstart_text text;
+  dtend_text text;
+  rdate_text text[];
+  exdate_text text[];
 BEGIN
+  -- Extract text values first for better error messages
   SELECT
-    "dtstart"::TIMESTAMP,
-    "dtend"::TIMESTAMP,
+    "dtstart",
+    "dtend",
     _rrule.jsonb_to_rrule("rrule") "rrule",
     _rrule.jsonb_to_rrule("exrule") "exrule",
-    "rdate"::TIMESTAMP[],
-    "exdate"::TIMESTAMP[]
-  INTO result
+    "rdate",
+    "exdate"
+  INTO dtstart_text, dtend_text, result."rrule", result."exrule", rdate_text, exdate_text
   FROM jsonb_to_record("input") as x(
     "dtstart" text,
     "dtend" text,
@@ -1115,13 +1175,46 @@ BEGIN
     "exdate" text[]
   );
 
-  -- Validate rruleset
-  IF result."dtstart" IS NULL THEN
+  -- Validate DTSTART presence
+  IF dtstart_text IS NULL THEN
     RAISE EXCEPTION 'DTSTART cannot be null.';
   END IF;
 
-  IF result."dtend" IS NOT NULL AND result."dtend" < result."dtstart" THEN
-    RAISE EXCEPTION 'DTEND must be greater than or equal to DTSTART.';
+  -- Parse timestamps with better error messages
+  BEGIN
+    result."dtstart" := dtstart_text::TIMESTAMP;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Invalid DTSTART timestamp format: "%". Expected ISO 8601 format (e.g., "2026-01-01T09:00:00").', dtstart_text;
+  END;
+
+  IF dtend_text IS NOT NULL THEN
+    BEGIN
+      result."dtend" := dtend_text::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid DTEND timestamp format: "%". Expected ISO 8601 format (e.g., "2026-12-31T17:00:00").', dtend_text;
+    END;
+
+    IF result."dtend" < result."dtstart" THEN
+      RAISE EXCEPTION 'DTEND must be greater than or equal to DTSTART.';
+    END IF;
+  END IF;
+
+  -- Parse RDATE array with better error messages
+  IF rdate_text IS NOT NULL THEN
+    BEGIN
+      result."rdate" := rdate_text::TIMESTAMP[];
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid RDATE timestamp format. Expected array of ISO 8601 timestamps.';
+    END;
+  END IF;
+
+  -- Parse EXDATE array with better error messages
+  IF exdate_text IS NOT NULL THEN
+    BEGIN
+      result."exdate" := exdate_text::TIMESTAMP[];
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid EXDATE timestamp format. Expected array of ISO 8601 timestamps.';
+    END;
   END IF;
 
   RETURN result;

@@ -9,6 +9,7 @@ CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
+  v_until_text text;
 BEGIN
   WITH "tokens" AS (
     WITH parsed_line as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
@@ -21,7 +22,7 @@ BEGIN
       (SELECT "val"::_rrule.FREQ FROM "tokens" WHERE "key" = 'FREQ') AS "freq",
       (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'INTERVAL') AS "interval",
       (SELECT "val"::INTEGER FROM "tokens" WHERE "key" = 'COUNT') AS "count",
-      (SELECT "val"::TIMESTAMP FROM "tokens" WHERE "key" = 'UNTIL') AS "until",
+      (SELECT "val" FROM "tokens" WHERE "key" = 'UNTIL') AS "until_val",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYSECOND') AS "bysecond",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYMINUTE') AS "byminute",
       (SELECT _rrule.integer_array("val") FROM "tokens" WHERE "key" = 'BYHOUR') AS "byhour",
@@ -38,7 +39,7 @@ BEGIN
     -- Default value for INTERVAL
     COALESCE("interval", 1) AS "interval",
     "count",
-    "until",
+    "until_val",
     "bysecond",
     "byminute",
     "byhour",
@@ -50,8 +51,20 @@ BEGIN
     "bysetpos",
     -- DEFAULT value for wkst
     COALESCE("wkst", 'MO') AS "wkst"
-  INTO result
+  INTO result."freq", result."interval", result."count", v_until_text,
+       result."bysecond", result."byminute", result."byhour", result."byday",
+       result."bymonthday", result."byyearday", result."byweekno", result."bymonth",
+       result."bysetpos", result."wkst"
   FROM candidate;
+
+  -- Parse UNTIL with better error handling
+  IF v_until_text IS NOT NULL THEN
+    BEGIN
+      result."until" := v_until_text::TIMESTAMP;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid UNTIL timestamp format: "%". Expected format: YYYYMMDDTHHMMSS', v_until_text;
+    END;
+  END IF;
 
   PERFORM _rrule.validate_rrule(result);
 

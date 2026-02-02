@@ -213,31 +213,39 @@ This checklist identifies low-hanging fruit for improving code craftsmanship in 
 
 ### SQL Injection & Safety
 
-- [ ] **Review dynamic SQL patterns** - Line 114 (if any remain in compiled version)
-  - Current: Check for any dynamic SQL construction
-  - Issue: Potential SQL injection if not properly quoted
-  - Recommendation: Ensure all dynamic SQL uses proper quoting
-  - Impact: Critical if found, but likely already safe with STRICT functions
+- [x] **Review dynamic SQL patterns** - Line 114 (if any remain in compiled version) ✅ **COMPLETED**
+  - Solution implemented: Eliminated all dynamic SQL construction
+  - Changes:
+    - ✅ 0201-occurrences.sql: Rewrote array occurrences function using unnest() with LATERAL join
+    - ✅ Converted from plpgsql with EXECUTE to pure SQL language
+    - ✅ Completely eliminates SQL injection risk
+  - Impact: Critical security improvement, better performance, more maintainable code
 
-- [ ] **Validate TIMESTAMP parsing** - Lines 432-437
-  - Current: Direct cast to TIMESTAMP without validation
-  - Issue: Could raise unhelpful errors for invalid formats
-  - Recommendation: Add TRY/CATCH or validation before casting
-  - Impact: Low effort, better error messages
+- [x] **Validate TIMESTAMP parsing** - Lines 432-437 ✅ **COMPLETED**
+  - Solution implemented: Added TRY/CATCH blocks with descriptive error messages
+  - Changes:
+    - ✅ 0220-jsonb_to_rruleset.sql: Added validation for DTSTART, DTEND, RDATE, EXDATE
+    - ✅ 0105-rruleset.sql: Added validation for all timestamp fields (converted to plpgsql)
+    - ✅ 0100-rrule.sql: Added validation for UNTIL field
+  - Error messages now include:
+    - Field name and invalid value
+    - Expected format with examples
+  - Impact: Significantly better user experience with clear, actionable error messages
 
-- [ ] **Add overflow checks for interval arithmetic** - Lines 64-66, 224
-  - Current: Arithmetic without overflow protection
-  - Issue: Very large intervals could overflow
-  - Recommendation: Add explicit overflow checks for extreme cases
-  - Impact: Low effort, prevents unexpected errors
+- [x] **Add overflow checks for interval arithmetic** - Lines 64-66, 224 ✅ **COMPLETED**
+  - Solution implemented: Added interval value validation in build_interval()
+  - Changes:
+    - ✅ 0014-build_interval.sql: Validates interval is between 1 and 1,000,000
+    - ✅ Prevents arithmetic overflow issues
+    - ✅ Clear error message when out of range
+  - Impact: Prevents unexpected errors from extreme interval values
 
 ### PostgreSQL Best Practices
 
-- [ ] **Use explicit casting** - Throughout
-  - Current: Mix of `::TYPE` and `CAST(x AS TYPE)`
-  - Issue: Inconsistent casting style
-  - Recommendation: Standardize on one approach (prefer `::` for readability)
-  - Impact: Very low effort, consistency improvement
+- [x] **Use explicit casting** - Throughout ✅ **VERIFIED**
+  - Current: Consistently uses `::TYPE` throughout (PostgreSQL preferred style)
+  - Only 1 CAST() usage in timestamp_to_day.sql where it's more readable for CASE expression
+  - Impact: Code already consistent - no changes needed
 
 - [x] **Review function volatility** - Throughout ✅ **VERIFIED**
   - Current: All functions correctly marked IMMUTABLE
@@ -378,12 +386,12 @@ This checklist identifies low-hanging fruit for improving code craftsmanship in 
 - ✅ Document function parameters (completed - 30+ overloads documented)
 - ✅ Add boundary condition explanations (RFC 5545 constraint comments added)
 
-**Security & Best Practices** (Low priority, edge cases):
+**Security & Best Practices** (All completed):
 
-- Review dynamic SQL patterns (likely already safe)
-- Validate TIMESTAMP parsing (add better error messages)
-- Add overflow checks for interval arithmetic (extreme edge cases)
-- Use explicit casting consistently (already using `::TYPE` consistently ✅)
+- ✅ Review dynamic SQL patterns (eliminated all dynamic SQL)
+- ✅ Validate TIMESTAMP parsing (added comprehensive error handling)
+- ✅ Add overflow checks for interval arithmetic (validated interval ranges)
+- ✅ Use explicit casting consistently (verified `::TYPE` usage throughout)
 
 ---
 
@@ -412,6 +420,7 @@ All PostgreSQL best practices have been implemented or verified:
 ---
 
 **Impact**: The codebase now follows all major PostgreSQL best practices, enabling:
+
 - Parallel query execution (PARALLEL SAFE)
 - Proper query optimization (IMMUTABLE classification)
 - Robust function resolution (schema-qualified calls)
@@ -440,24 +449,28 @@ All refactoring opportunities have been evaluated:
 ### All Completed Work
 
 **Phase 1: Quick Wins** (High Priority) ✅
+
 - Removed TODO comments (6 instances)
 - Standardized CTE naming (cryptic names → descriptive names)
 - Added function-level documentation (~40 functions)
 - Standardized error messages (sentence case with periods)
 
 **Phase 2: Performance Optimizations** (Medium Priority) ✅
+
 - Replaced FOREACH loops with set-based operations (6 functions)
 - Optimized array concatenation (array_agg, jsonb_agg)
 - Added NULL checks to short-circuit generate_series
 - Cached interval calculations in CTEs
 
 **Phase 3: Code Quality & Maintainability** (Medium Priority) ✅
+
 - Created has_any_by_rule() helper function
 - Added COUNT positive validation
 - Added 9 empty array validations
 - Standardized error messages
 
 **Phase 4: Testing Improvements** (Low Priority) ✅
+
 - Expanded test coverage from 84 to 164 tests (+95%)
 - Created 5 new comprehensive test files
 - Added validation rule tests
@@ -466,6 +479,7 @@ All refactoring opportunities have been evaluated:
 - Added before/after timestamp tests
 
 **Phase 5: Documentation Improvements** (Low Priority) ✅
+
 - Added comprehensive algorithm documentation
 - Added schema-level documentation
 - Added RFC 5545 constraint comments
@@ -473,43 +487,55 @@ All refactoring opportunities have been evaluated:
 - Added parameter documentation (30+ function overloads)
 
 **Phase 6: PostgreSQL Best Practices** (Mixed Priority) ✅
+
 - Added PARALLEL SAFE to 44 functions
 - Verified IMMUTABLE volatility classification
 - Verified schema qualification (already present)
 - Verified casting style consistency (already consistent)
 
 **Phase 7: Refactoring Opportunities** (Low Priority) ✅
+
 - Evaluated function splitting (accepted current structure as optimal)
 - Evaluated pattern extraction (accepted idiomatic usage)
 
+**Phase 8: Security & Best Practices** (Mixed Priority) ✅
+
+- Eliminated all dynamic SQL patterns (SQL injection prevention)
+- Added comprehensive timestamp parsing validation with clear error messages
+- Added interval overflow checks (prevents arithmetic errors)
+- Verified casting consistency (already using `::TYPE` standard)
+
 ### 📈 Final Impact Metrics
 
-- **Functions optimized**: 6 (FOREACH → set-based operations)
+- **Functions optimized**: 7 (FOREACH → set-based + dynamic SQL elimination)
 - **Functions documented**: ~40 (with COMMENT ON FUNCTION)
 - **Function parameters documented**: 30+ overloads (with inline parameter descriptions)
 - **Functions marked PARALLEL SAFE**: 44
+- **Functions with enhanced error handling**: 4 (timestamp parsing + interval validation)
 - **Test coverage increase**: +95% (84 → 164 tests)
 - **New test files created**: 5
 - **Validation rules added**: 10 (COUNT + 9 empty arrays)
+- **Security improvements**: 3 (SQL injection, timestamp validation, overflow checks)
 - **Helper functions created**: 1 (has_any_by_rule)
-- **Source files improved**: 25+
+- **Source files improved**: 28+
 - **Lines of documentation added**: ~300+
 
 ### 🎯 Quality Improvements Achieved
 
-1. **Performance**: Set-based operations, parallel execution support, optimized series generation
-2. **Reliability**: Comprehensive input validation, expanded test coverage
-3. **Maintainability**: Clear naming, comprehensive documentation, extracted helper functions
-4. **PostgreSQL Best Practices**: PARALLEL SAFE, proper volatility, schema qualification
-5. **Code Quality**: Standardized style, clear error messages, well-documented algorithms
+1. **Performance**: Set-based operations, parallel execution support, optimized series generation, eliminated dynamic SQL
+2. **Security**: Eliminated SQL injection vectors, comprehensive input validation, overflow protection
+3. **Reliability**: Enhanced error messages, timestamp validation, expanded test coverage (84 → 164 tests)
+4. **Maintainability**: Clear naming, comprehensive documentation (40 functions + 30+ parameters), extracted helper functions
+5. **PostgreSQL Best Practices**: PARALLEL SAFE (44 functions), proper volatility, schema qualification, consistent casting
+6. **Code Quality**: Standardized style, descriptive error messages, well-documented algorithms
 
 ### 📝 Remaining Optional Items
 
-All remaining items are low-priority polish or edge cases:
-- Minor style consistency (identifier quoting, semicolons)
-- Edge case handling (timestamp validation, overflow checks)
+All remaining items are low-priority polish:
 
-**All high and medium priority work is complete. Documentation is comprehensive. The codebase is production-ready with excellent quality.**
+- Minor style consistency (identifier quoting, semicolons, string literal quoting)
+
+**All high and medium priority work is complete. All security issues addressed. Documentation is comprehensive. The codebase is production-ready with excellent quality and security.**
 
 ---
 

@@ -129,6 +129,7 @@ RETURNS SETOF TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Generates all occurrences from multiple rulesets within a time range.
+-- Rewritten to eliminate dynamic SQL for better security and maintainability.
 --
 -- Parameters:
 --   rruleset_array - Array of rulesets to combine
@@ -140,26 +141,8 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-DECLARE
-  i int;
-  lim int;
-  q text := '';
-BEGIN
-  lim := array_length("rruleset_array", 1);
-
-  IF lim IS NULL THEN
-    q := 'VALUES (NULL::TIMESTAMP) LIMIT 0;';
-  ELSE
-    FOR i IN 1..lim
-    LOOP
-      q := q || $q$SELECT _rrule.occurrences('$q$ || "rruleset_array"[i] ||$q$'::_rrule.RRULESET, '$q$ || "tsrange" ||$q$'::TSRANGE)$q$;
-      IF i != lim THEN
-        q := q || ' UNION ';
-      END IF;
-    END LOOP;
-    q := q || ' ORDER BY occurrences ASC';
-  END IF;
-
-  RETURN QUERY EXECUTE q;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
+  SELECT DISTINCT occurrence
+  FROM unnest("rruleset_array") AS rruleset,
+       LATERAL _rrule.occurrences(rruleset, "tsrange") AS occurrence
+  ORDER BY occurrence;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
