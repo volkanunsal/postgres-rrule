@@ -6,7 +6,7 @@ RETURNS TEXT AS $$
     || COALESCE('FREQ=' || $1."freq" || ';', '')
     || CASE WHEN $1."interval" = 1 THEN '' ELSE COALESCE('INTERVAL=' || $1."interval" || ';', '') END
     || COALESCE('COUNT=' || $1."count" || ';', '')
-    || COALESCE('UNTIL=' || $1."until" || ';', '')
+    || COALESCE('UNTIL=' || to_char($1."until", 'YYYYMMDD"T"HH24MISS"Z"') || ';', '')
     || COALESCE('BYSECOND=' || _rrule.array_join($1."bysecond", ',') || ';', '')
     || COALESCE('BYMINUTE=' || _rrule.array_join($1."byminute", ',') || ';', '')
     || COALESCE('BYHOUR=' || _rrule.array_join($1."byhour", ',') || ';', '')
