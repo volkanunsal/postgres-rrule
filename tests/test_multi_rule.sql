@@ -105,7 +105,7 @@ SELECT is(
                 "rdate": ["2026-01-15T09:00:00"]
             }'::jsonb)
         ) AS occurrences
-    )),
+    ) AS distinct_occurrences),
     3::bigint,
     'RDATE adds additional occurrences to RRULE set'
 );
