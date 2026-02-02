@@ -248,6 +248,7 @@ ci-test:
 		tests/test_is_finite.sql \
 		tests/test_jsonb_conversion.sql \
 		tests/test_last.sql \
+		tests/test_multi_rule.sql \
 		tests/test_occurrences.sql \
 		tests/test_ordinal_byday.sql \
 		tests/test_parser.sql \

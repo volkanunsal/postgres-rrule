@@ -58,7 +58,7 @@ SELECT is(
         _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb)
     )->'rrule'->0->'freq')::text,
     '"DAILY"',
-    'RRULESET rrule.freq converts to JSONB correctly'
+    'RRULESET rrule[0].freq converts to JSONB correctly (array format)'
 );
 
 -- Test JSONB to RRULESET conversion

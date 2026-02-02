@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(13);
+SELECT plan(16);
 
 SET search_path TO _rrule, public;
 
@@ -55,6 +55,31 @@ SELECT is(
     ("1997-09-02 09:00:00","1997-09-03 09:00:00","{\"(WEEKLY,1,4,,,,,,,,,,,MO)\"}",,,)
   $$,
   'jsonb_to_rruleset outputs correct result'
+);
+
+SELECT is(
+  _rrule.rruleset_array_to_jsonb(ARRAY[_rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": [{"freq": "WEEKLY", "count": 4}]}'::text::jsonb)]::_rrule.RRULESET[]),
+  $$[{"dtend": "1997-09-03T09:00:00", "rrule": [{"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}], "dtstart": "1997-09-02T09:00:00"}]$$::jsonb,
+  'rruleset_array_to_jsonb outputs rrule as array'
+);
+
+SELECT ok(
+  (SELECT r.dtstart = '1997-09-02T09:00:00'::timestamp
+    AND r.dtend = '1997-09-03T09:00:00'::timestamp
+    AND (r.rrule)[1].freq = 'WEEKLY'
+    AND (r.rrule)[1].count = 4
+  FROM unnest(_rrule.jsonb_to_rruleset_array('[{"dtend": "1997-09-03T09:00:00", "rrule": [{"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}], "dtstart": "1997-09-02T09:00:00"}]'::jsonb)) AS r),
+  'jsonb_to_rruleset_array parses correctly'
+);
+
+SELECT ok(
+  (WITH result AS (SELECT _rrule.jsonb_to_rruleset('{"dtstart": "19970902T090000", "dtend": "19970903T090000", "rrule": [{"freq": "WEEKLY", "count": 4}]}'::text::jsonb) AS r)
+  SELECT (r).dtstart = '1997-09-02T09:00:00'::timestamp
+    AND (r).dtend = '1997-09-03T09:00:00'::timestamp
+    AND ((r).rrule)[1].freq = 'WEEKLY'
+    AND ((r).rrule)[1].count = 4
+  FROM result),
+  'jsonb_to_rruleset parses fields correctly'
 );
 
 SELECT is(
