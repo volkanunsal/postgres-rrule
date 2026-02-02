@@ -39,6 +39,14 @@ help:
 	@echo "  make local-clean      - Drop _rrule schema from local database"
 	@echo "  make local-pgtap      - Install pgTAP extension locally"
 	@echo ""
+	@echo "🚀 Release Management:"
+	@echo "  make release-patch    - Create a patch release (0.0.X)"
+	@echo "  make release-minor    - Create a minor release (0.X.0)"
+	@echo "  make release-major    - Create a major release (X.0.0)"
+	@echo "  make push-release     - Push release commit and tags to remote"
+	@echo "  make release-dry-run  - Preview release changes without committing"
+	@echo "  make show-version     - Display current version"
+	@echo ""
 	@echo "Docker Configuration:"
 	@echo "  Image: $(DOCKER_IMAGE_NAME)"
 	@echo "  Container: $(DOCKER_CONTAINER_NAME)"
@@ -244,3 +252,38 @@ ci-test:
 		tests/test_ordinal_byday.sql \
 		tests/test_parser.sql \
 		tests/test_validation.sql
+
+# ============================================================================
+# Release Management Targets
+# ============================================================================
+
+.PHONY: show-version release-patch release-minor release-major release-dry-run push-release
+
+# Display current version
+show-version:
+	@echo "Current version: $$(cat VERSION)"
+
+# Create a patch release (0.0.X)
+release-patch:
+	@echo "Creating patch release..."
+	@./scripts/prepare-release.sh patch
+
+# Create a minor release (0.X.0)
+release-minor:
+	@echo "Creating minor release..."
+	@./scripts/prepare-release.sh minor
+
+# Create a major release (X.0.0)
+release-major:
+	@echo "Creating major release..."
+	@./scripts/prepare-release.sh major
+
+# Preview release without making changes
+release-dry-run:
+	@echo "Previewing release (dry run mode)..."
+	@./scripts/prepare-release.sh patch --dry-run
+
+# Push release to remote repository
+push-release:
+	@echo "Pushing release to remote..."
+	@./scripts/push-release.sh

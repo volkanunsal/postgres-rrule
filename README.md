@@ -22,6 +22,7 @@ A PostgreSQL extension for working with recurring dates and events using the iCa
 - [Examples](#examples)
 - [API Reference](#api-reference)
 - [Testing](#testing)
+- [Release Management](#release-management)
 - [License](#license)
 
 ## Installation
@@ -621,6 +622,102 @@ This repository is in maintenance mode, but bug reports and pull requests are we
 3. Make your changes and add tests
 4. Run `make all test` to verify
 5. Submit a pull request
+
+## Release Management
+
+This project uses automated release management with semantic versioning and changelog generation.
+
+### Creating a Release
+
+Release creation is automated through Makefile targets. The release process:
+
+1. Updates the VERSION file
+2. Generates changelog entries from git commit history
+3. Compiles the extension with version header
+4. Creates a git commit and tag
+5. Provides commands to push the release
+
+**Available release types:**
+
+```bash
+# Patch release (0.0.X) - for bug fixes
+make release-patch
+
+# Minor release (0.X.0) - for new features (backward compatible)
+make release-minor
+
+# Major release (X.0.0) - for breaking changes
+make release-major
+```
+
+**Preview changes without committing:**
+
+```bash
+make release-dry-run
+```
+
+**View current version:**
+
+```bash
+make show-version
+```
+
+### Publishing a Release
+
+After creating a release, review the changes and push to the remote repository:
+
+```bash
+# Review the release commit
+git show HEAD
+
+# Review the changelog
+cat CHANGELOG.md
+
+# Push the release (with confirmation prompt)
+make push-release
+```
+
+The `push-release` target will:
+- Show a summary of what will be pushed
+- Ask for confirmation
+- Push the commit and tag to the remote
+- Optionally create a GitHub release (if `gh` CLI is installed)
+
+### Release Process Details
+
+The release automation follows these principles:
+
+- **Idempotent**: Safe to run multiple times - if a release already exists, it will exit gracefully
+- **Conventional Commits**: Changelog is generated from commit messages following the [Conventional Commits](https://www.conventionalcommits.org/) format
+- **Semantic Versioning**: Versions follow [semver](https://semver.org/) (MAJOR.MINOR.PATCH)
+- **Safety Checks**: Verifies clean working directory and no uncommitted changes
+
+**Commit Message Format:**
+
+```
+<type>(<scope>): <description>
+
+Examples:
+feat: add support for ordinal BYDAY
+fix: correct timestamp parsing in edge cases
+docs: update installation instructions
+```
+
+Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`
+
+### Undoing a Release (Before Pushing)
+
+If you need to undo a release before pushing:
+
+```bash
+# Reset to previous commit and remove tag
+git reset --hard HEAD~1
+git tag -d v<version>
+```
+
+### Changelog
+
+All release notes are maintained in [CHANGELOG.md](CHANGELOG.md), which is automatically generated and updated with each release.
 
 ## License
 
