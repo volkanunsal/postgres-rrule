@@ -436,7 +436,6 @@ RETURNS _rrule.RRULESET AS $$
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "rdate-line" AS "rdate"),
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "exdate-line" AS "exdate");
 $$ LANGUAGE SQL IMMUTABLE STRICT;
-
 -- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
@@ -1023,3 +1022,4 @@ CREATE CAST (jsonb AS _rrule.RRULESET)
 CREATE CAST (_rrule.RRULE AS jsonb)
   WITH FUNCTION _rrule.rrule_to_jsonb(_rrule.RRULE)
   AS IMPLICIT;
+
