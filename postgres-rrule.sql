@@ -1,6 +1,3 @@
--- postgres-rrule v1.0.0
--- Generated on 2026-02-02 16:47:55 UTC
-
 DROP SCHEMA IF EXISTS _rrule CASCADE;
 
 DROP CAST IF EXISTS (_rrule.RRULE AS TEXT);
@@ -948,8 +945,10 @@ BEGIN
     END;
   END IF;
 
-  -- Parse RRULE and EXRULE (wrap in arrays since schema uses RRULE[])
-  result."rrule" := ARRAY[_rrule.rrule($1)];
+  -- Parse RRULE and EXRULE (wrap in arrays for new schema)
+  IF _rrule.extract_line($1, 'RRULE') IS NOT NULL THEN
+    result."rrule" := ARRAY[_rrule.rrule($1)];
+  END IF;
 
   IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
     result."exrule" := ARRAY[_rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'))];
@@ -1004,14 +1003,27 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- Returns true if the ruleset has a defined end.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE array and optional EXRULE array
+--   rruleset - The ruleset containing RRULE[] and optional EXRULE[]
 --
--- Returns: True if at least one RRULE has COUNT or UNTIL set
+-- Returns: True if ALL RRULEs have COUNT or UNTIL set (infinite if any RRULE is infinite)
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  SELECT COALESCE(bool_or(_rrule.is_finite(r)), false)
+  SELECT COALESCE(bool_and(_rrule.is_finite(r)), true)
   FROM unnest("rruleset"."rrule") AS r;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
+
+-- Returns true if any ruleset in the array has a defined end.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to check
+--
+-- Returns: True if at least one ruleset has COUNT or UNTIL set
+CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
+RETURNS BOOLEAN AS $$
+  SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
+  FROM unnest("rruleset_array") AS item;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
+
 
 -- Check if an array of RRULEs has at least one finite recurrence
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule_array" _rrule.RRULE[])

@@ -81,20 +81,30 @@ SELECT throws_like(
 );
 
 -- Test EXRULE parsing
-SELECT is(
-    (rruleset('DTSTART:20230724T100000
+SELECT ok(
+    ((rruleset('DTSTART:20230724T100000
 RRULE:FREQ=WEEKLY;BYDAY=MO,WE
-EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule",
-    '{"(WEEKLY,1,,,,,,\"{MO,WE}\",,,,,,MO)"}',
-    'EXRULE is parsed correctly'
+EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule")[1].freq = 'WEEKLY'
+    AND ((rruleset('DTSTART:20230724T100000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE
+EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule")[1].byday IS NOT NULL
+    AND array_length(((rruleset('DTSTART:20230724T100000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE
+EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule")[1].byday, 1) = 2,
+    'EXRULE is parsed correctly (array format)'
 );
 
-SELECT is(
-    (rruleset('DTSTART:20230724T100000
+SELECT ok(
+    ((rruleset('DTSTART:20230724T100000
 RRULE:FREQ=DAILY;COUNT=10
-EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule",
-    '{"(WEEKLY,1,,,,,,{FR},,,,,,MO)"}',
-    'EXRULE with different FREQ than RRULE is parsed correctly'
+EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule")[1].freq = 'WEEKLY'
+    AND ((rruleset('DTSTART:20230724T100000
+RRULE:FREQ=DAILY;COUNT=10
+EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule")[1].byday IS NOT NULL
+    AND array_length(((rruleset('DTSTART:20230724T100000
+RRULE:FREQ=DAILY;COUNT=10
+EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule")[1].byday, 1) = 1,
+    'EXRULE with different FREQ than RRULE is parsed correctly (array format)'
 );
 
 

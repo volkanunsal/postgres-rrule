@@ -40,8 +40,10 @@ BEGIN
     END;
   END IF;
 
-  -- Parse RRULE and EXRULE (wrap in arrays since schema uses RRULE[])
-  result."rrule" := ARRAY[_rrule.rrule($1)];
+  -- Parse RRULE and EXRULE (wrap in arrays for new schema)
+  IF _rrule.extract_line($1, 'RRULE') IS NOT NULL THEN
+    result."rrule" := ARRAY[_rrule.rrule($1)];
+  END IF;
 
   IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
     result."exrule" := ARRAY[_rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'))];
