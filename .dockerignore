@@ -1,0 +1,28 @@
+# Git
+
+.git
+.gitignore
+
+# Documentation
+
+\*.md
+!CLAUDE.md
+
+# IDE
+
+.vscode
+.idea
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# Temporary files
+
+_.tmp
+_.log
+
+# Claude
+
+.claude

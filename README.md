@@ -1,140 +1,636 @@
 # postgres-rrule
 
-> MAINTENANCE MODE: This repo is in maintenance mode because I don't have time to devote to it any longer. 
+> **MAINTENANCE MODE**: This repository is in maintenance mode. Bug reports and pull requests are welcome, but active development is paused.
 
-postgres-rrule is a Postgres extension to make it easier to work with recurring dates in the database.
+A PostgreSQL extension for working with recurring dates and events using the iCalendar RRULE specification (RFC 5545).
 
-It parses RRULE statements, and generates occurrences.
+**Key Features:**
+- Parse RRULE strings and JSONB into native PostgreSQL types
+- Query whether a timestamp occurs within a recurrence rule
+- Generate occurrence sequences from recurrence rules
+- Support for EXDATE, RDATE, and EXRULE for complex recurrence patterns
+- Built-in operators for containment checking
 
-## Install
+**Important Limitation:** This extension requires all recurrence rules to include either `UNTIL` (end date) or `COUNT` (number of occurrences). Infinite recurrence rules are not supported.
 
-Execute `postgres-rrule.sql` in your database:
+## Table of Contents
 
-```
-  $ psql -X -f postgres-rrule.sql
-```
+- [Installation](#installation)
+- [Docker Development Environment](#docker-development-environment)
+- [Quick Start](#quick-start)
+- [How It Works](#how-it-works)
+- [Examples](#examples)
+- [API Reference](#api-reference)
+- [Testing](#testing)
+- [License](#license)
 
-Or
+## Installation
 
-```
-  $ make all
-```
+### Recommended: Docker (Easiest)
 
-And modify your search path to include `_rrule` schema:
+The recommended way to use and test postgres-rrule is with Docker:
 
-```
-  SET search_path TO public, _rrule;
-```
-
-## How it works
-
-We create a table (in a newly created `_rrule` schema) called `RRULE` to generate start dates from rule criteria. The table constraints enforce the validity of dates in the table.
-
-All of the types and functions are created in that schema. You can parse or query `RRULE` specifications.
-
-On a sidenote, the current implementation does not support endlessly reapeating events. Please make sure that you include the `UNTIL` or `COUNT` rrule to check for multiple occurences.
-
-## Example
-
-Parsing
-
-```
-newuser@newuser >> select '
-    DTSTART:19970902T090000
-    RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
-    '::TEXT::RRULESET;
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                                   rruleset                                    │
-├───────────────────────────────────────────────────────────────────────────────┤
-│ ("1997-09-02 09:00:00",,"(WEEKLY,1,,""1998-09-02 09:00:00"",,,,,,,,,,MO)",,,) │
-└───────────────────────────────────────────────────────────────────────────────┘
-(1 row)
+```bash
+# Build and run tests (includes Docker, PostgreSQL, pgTAP)
+make all
 ```
 
-Querying `RRULESET`.
+This provides a complete, isolated environment with all dependencies pre-installed. See [Docker Development Environment](#docker-development-environment) for details.
 
-```
-newuser@newuser >> select '
-    DTSTART:19970902T090000
-    RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
-    '::TEXT::RRULESET @> '19970902T090000'::timestamp;
-┌──────────┐
-│ ?column? │
-├──────────┤
-│ t        │
-└──────────┘
-(1 row)
-```
+### Alternative: Local PostgreSQL
 
-Also works with `jsonb`
+If you prefer to use your local PostgreSQL installation:
 
-```
-newuser@newuser >> select '{"dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "dtstart": "1997-09-02T09:00:00"}'::text::jsonb::rruleset @> '19970902T090000'::timestamp;
-┌──────────┐
-│ ?column? │
-├──────────┤
-│ t        │
-└──────────┘
-(1 row)
+#### Prerequisites
+
+- PostgreSQL 9.4 or later
+- psql command-line tool
+- pgTAP extension (for testing)
+- pg_prove (for testing)
+
+#### Install from Compiled SQL
+
+Use the pre-compiled `postgres-rrule.sql` file:
+
+```bash
+psql -X -f postgres-rrule.sql -d your_database
 ```
 
-### [`RRULE`](https://github.com/volkanunsal/postgres-rrule/blob/master/src/types/types.sql#L19-L36) Operators
+#### Build and Install from Source
 
-| Operator | Description          | Notes                                                                          | Result    |
-| -------- | -------------------- | ------------------------------------------------------------------------------ | --------- |
-| `=`      | equal                | All parameters match                                                           | `boolean` |
-| `<>`     | not equal            | Any parameters don't match                                                     | `boolean` |
-| `@>`     | contains `rrule`     | All occurrences generated by second rule would also be generated by first rule | `boolean` |
-| `<@`     | contained by `rrule` |                                                                                | `boolean` |
+```bash
+make compile          # Build postgres-rrule.sql
+make local-execute    # Install into local PostgreSQL
+```
 
-### [`RRULESET`](https://github.com/volkanunsal/postgres-rrule/blob/master/src/types/types.sql#L39-L45) Operators
+#### Configure Search Path
 
-| Operator | Description          | Notes                                                  | Result    |
-| -------- | -------------------- | ------------------------------------------------------ | --------- |
-| `@>`     | contains `timestamp` | The date of the timestamp is generated by the ruleset. | `boolean` |
+After installation, add the `_rrule` schema to your search path:
 
-### `RRULESET[]` Operators
+**Per-session:**
+```sql
+SET search_path TO public, _rrule;
+```
 
-| Operator | Description          | Notes                                                                       | Result    |
-| -------- | -------------------- | --------------------------------------------------------------------------- | --------- |
-| `@>`     | contains `timestamp` | The date of the timestamp is generated by one of the rulesets in the array. | `boolean` |
+**Permanently for a database:**
+```sql
+ALTER DATABASE your_database SET search_path TO public, _rrule;
+```
 
-### `RRULESET::jsonb` Operators
+**Permanently for a user:**
+```sql
+ALTER ROLE your_user SET search_path TO public, _rrule;
+```
 
-| Operator | Description          | Notes                                              | Result    |
-| -------- | -------------------- | -------------------------------------------------- | --------- |
-| `@>`     | contains `timestamp` | The date of the timestamp is generated by ruleset. | `boolean` |
+## Docker Development Environment
 
-### `RRULESET[]::jsonb` Operators
+A Docker-based development environment is provided for consistent testing across different machines. This is the recommended approach for development and testing.
 
-| Operator | Description          | Notes                                                                             | Result    |
-| -------- | -------------------- | --------------------------------------------------------------------------------- | --------- |
-| `@>`     | contains `timestamp` | The date of the timestamp is generated by one of the rulesets in the jsonb array. | `boolean` |
+**📚 See [DOCKER.md](DOCKER.md) for comprehensive Docker documentation, troubleshooting, and advanced usage patterns.**
+
+### Prerequisites
+
+- Docker installed on your system
+- Docker daemon running
+
+### Quick Docker Usage
+
+Build and test in one command:
+
+```bash
+make all
+```
+
+This will:
+1. Pull the PostgreSQL base image (postgres:16)
+2. Build the development Docker image with all dependencies
+3. Start a PostgreSQL container
+4. Compile and install the extension
+5. Run all tests
+6. Clean up the container
+
+### Docker Makefile Targets
+
+**Main Commands:**
+```bash
+make all              # Build and test (recommended)
+make test             # Run all tests in a clean container
+make build            # Build the Docker image with pgTAP installed
+make pull             # Pull the base PostgreSQL image (fast)
+```
+
+**Development:**
+```bash
+make start            # Start a PostgreSQL container (detached)
+make stop             # Stop and remove the container
+make shell            # Open a bash shell inside the container
+make psql             # Open a psql session inside the container
+make logs             # View container logs
+```
+
+**Cleanup:**
+```bash
+make clean            # Remove container, image, and prune Docker resources
+make rebuild          # Clean and rebuild everything from scratch
+```
+
+**Note**: Old `docker-*` commands still work but show deprecation warnings. Use the shorter versions above.
+
+### Docker Container Details
+
+- **Container name**: `postgres-rrule-test`
+- **Image name**: `postgres-rrule`
+- **Base image**: `postgres:16`
+- **Exposed port**: `5433` (mapped to container's 5432)
+- **Database user**: `postgres`
+- **Database password**: `unsafe`
+- **Working directory**: `/workspace` (mounted from current directory)
+
+### Example Docker Workflow
+
+```bash
+# First time setup and test
+make all
+
+# After making code changes
+make test
+
+# For debugging, start container and explore
+make start
+make psql
+# ... run queries ...
+# ... test manually ...
+make stop
+
+# Clean up when done
+make clean
+```
+
+### Advantages of Docker Environment
+
+- **Consistent dependencies**: pgTAP and all required tools pre-installed
+- **Isolated testing**: No interference with local PostgreSQL installation
+- **Clean slate**: Each test run starts with a fresh database
+- **Cross-platform**: Works identically on Linux, macOS, and Windows
+- **CI/CD ready**: Easy to integrate into automated pipelines
+
+## Quick Start
+
+Check if a date is part of a recurring series:
+
+```sql
+-- Every Tuesday until September 2, 1998
+SELECT '
+  DTSTART:19970902T090000
+  RRULE:FREQ=WEEKLY;UNTIL=19980902T090000;BYDAY=TU
+'::TEXT::RRULESET @> '1997-09-09 09:00:00'::TIMESTAMP;
+-- Returns: true
+
+-- Check if a date is NOT in the series
+SELECT '
+  DTSTART:19970902T090000
+  RRULE:FREQ=WEEKLY;UNTIL=19980902T090000;BYDAY=TU
+'::TEXT::RRULESET @> '1997-09-10 09:00:00'::TIMESTAMP;
+-- Returns: false (Sept 10, 1997 is Wednesday)
+```
+
+Generate all occurrences:
+
+```sql
+SELECT * FROM occurrences(
+  'DTSTART:20260101T100000
+   RRULE:FREQ=DAILY;COUNT=5'::TEXT::RRULESET
+);
+-- Returns:
+-- 2026-01-01 10:00:00
+-- 2026-01-02 10:00:00
+-- 2026-01-03 10:00:00
+-- 2026-01-04 10:00:00
+-- 2026-01-05 10:00:00
+```
+
+## How It Works
+
+postgres-rrule creates a dedicated `_rrule` schema containing:
+
+- **Custom types**: `RRULE` and `RRULESET` composite types that represent recurrence rules
+- **Type constraints**: Table constraints that enforce RFC 5545 validity rules
+- **Functions**: Parse RRULE strings, generate occurrences, and query recurrence rules
+- **Operators**: Intuitive operators like `@>` (contains) for checking date membership
+- **Casts**: Automatic conversion between TEXT, JSONB, and native types
+
+The `RRULE` type is implemented as a table structure, allowing PostgreSQL's constraint system to validate recurrence rules at parse time.
+
+## Examples
+
+### Parsing RRULE Strings
+
+Parse a recurrence rule into the native `RRULESET` type:
+
+```sql
+SELECT '
+  DTSTART:19970902T090000
+  RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
+'::TEXT::RRULESET;
+
+-- Returns the parsed RRULESET structure
+-- ("1997-09-02 09:00:00",,"(WEEKLY,1,,""1998-09-02 09:00:00"",,,,,,,,,,MO)",,,)
+```
+
+### Checking Date Membership
+
+Check if a specific timestamp occurs within a recurrence rule:
+
+```sql
+SELECT '
+  DTSTART:19970902T090000
+  RRULE:FREQ=WEEKLY;UNTIL=19980902T090000
+'::TEXT::RRULESET @> '1997-09-02T09:00:00'::TIMESTAMP;
+-- Returns: true
+```
+
+### Working with JSONB
+
+The extension supports JSONB format for easier integration with applications:
+
+```sql
+SELECT '{
+  "dtstart": "1997-09-02T09:00:00",
+  "dtend": "1997-09-03T09:00:00",
+  "rrule": {
+    "freq": "WEEKLY",
+    "wkst": "MO",
+    "count": 4,
+    "interval": 1
+  }
+}'::JSONB::RRULESET @> '1997-09-02T09:00:00'::TIMESTAMP;
+-- Returns: true
+```
+
+### Common Recurrence Patterns
+
+**Daily for 10 occurrences:**
+```sql
+SELECT * FROM occurrences(
+  'DTSTART:20260201T090000
+   RRULE:FREQ=DAILY;COUNT=10'::TEXT::RRULESET
+) LIMIT 5;
+```
+
+**Every other week on Tuesday and Thursday:**
+```sql
+SELECT '
+  DTSTART:20260201T090000
+  RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH;COUNT=8
+'::TEXT::RRULESET;
+```
+
+**Monthly on the 1st and 15th:**
+```sql
+SELECT * FROM occurrences(
+  'DTSTART:20260201T090000
+   RRULE:FREQ=MONTHLY;BYMONTHDAY=1,15;COUNT=12'::TEXT::RRULESET
+);
+```
+
+**Every weekday (Monday-Friday):**
+```sql
+SELECT '
+  DTSTART:20260201T090000
+  RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;UNTIL=20261231T090000
+'::TEXT::RRULESET;
+```
+
+### Using EXDATE and RDATE
+
+Exclude specific dates or add extra dates to a recurrence:
+
+```sql
+-- Every day except Christmas and New Year's
+SELECT '
+  DTSTART:20260101T090000
+  RRULE:FREQ=DAILY;UNTIL=20260131T090000
+  EXDATE:20260101T090000,20260125T090000
+'::TEXT::RRULESET @> '2026-01-25T09:00:00'::TIMESTAMP;
+-- Returns: false (excluded)
+
+-- Add specific dates outside the normal pattern
+SELECT '
+  DTSTART:20260101T090000
+  RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4
+  RDATE:20260115T090000
+'::TEXT::RRULESET;
+```
+
+### Querying with Arrays
+
+Check if a timestamp matches any rule in an array of rulesets:
+
+```sql
+SELECT ARRAY[
+  'DTSTART:20260101T090000
+   RRULE:FREQ=WEEKLY;BYDAY=MO;COUNT=4'::TEXT::RRULESET,
+  'DTSTART:20260101T100000
+   RRULE:FREQ=WEEKLY;BYDAY=WE;COUNT=4'::TEXT::RRULESET
+] @> '2026-01-07T10:00:00'::TIMESTAMP;
+-- Returns: true (matches Wednesday rule)
+```
+
+## API Reference
+
+### Types
+
+**`RRULE`**: Composite type representing a single recurrence rule with fields:
+- `freq`: Frequency (YEARLY, MONTHLY, WEEKLY, DAILY)
+- `interval`: Interval between occurrences (default: 1)
+- `count`: Maximum number of occurrences
+- `until`: End date for recurrence
+- `byday`, `bymonthday`, `byyearday`, `byweekno`, `bymonth`, `bysetpos`: Recurrence constraints
+- `wkst`: Week start day (default: MO)
+
+**`RRULESET`**: Composite type containing:
+- `dtstart`: Start timestamp (required)
+- `dtend`: End timestamp
+- `rrule`: The recurrence rule
+- `exrule`: Exclusion recurrence rule
+- `rdate`: Array of additional timestamps to include
+- `exdate`: Array of timestamps to exclude
+
+### Operators
+
+#### `RRULE` Operators
+
+| Operator | Left Type | Right Type | Description | Example |
+|----------|-----------|------------|-------------|---------|
+| `=` | `RRULE` | `RRULE` | Equal (all parameters match) | `rule1 = rule2` |
+| `<>` | `RRULE` | `RRULE` | Not equal | `rule1 <> rule2` |
+| `@>` | `RRULE` | `RRULE` | Contains (all occurrences of right would be generated by left) | `rule1 @> rule2` |
+| `<@` | `RRULE` | `RRULE` | Contained by | `rule1 <@ rule2` |
+
+#### `RRULESET` Operators
+
+| Operator | Left Type | Right Type | Description | Example |
+|----------|-----------|------------|-------------|---------|
+| `@>` | `RRULESET` | `TIMESTAMP` | Contains timestamp | `ruleset @> '2026-01-15'::TIMESTAMP` |
+| `@>` | `RRULESET[]` | `TIMESTAMP` | Any ruleset in array contains timestamp | `ARRAY[ruleset1, ruleset2] @> ts` |
+| `@>` | `JSONB` (as RRULESET) | `TIMESTAMP` | JSONB ruleset contains timestamp | `'{"dtstart": ...}'::JSONB @> ts` |
 
 ### Functions
 
-In the case of the `rrule` functions, there is a second required argument of type `timestamp`, which is the `"dtstart"` argument of a `rruleset`. There is a form for each `rrule`-accepting function that accepts a `text` value, and parses it.
+#### Occurrence Generation
+
+**`occurrences(rruleset RRULESET) → SETOF TIMESTAMP`**
+Generate all occurrences from a ruleset.
+
+```sql
+SELECT * FROM occurrences(
+  'DTSTART:20260101T100000
+   RRULE:FREQ=DAILY;COUNT=3'::RRULESET
+);
+```
+
+**`occurrences(rruleset RRULESET, tsrange TSRANGE) → SETOF TIMESTAMP`**
+Generate occurrences within a specific time range.
+
+```sql
+SELECT * FROM occurrences(
+  'DTSTART:20260101T100000
+   RRULE:FREQ=DAILY;COUNT=100'::RRULESET,
+  '[2026-01-15, 2026-01-20]'::TSRANGE
+);
+```
+
+**`occurrences(rrule RRULE, dtstart TIMESTAMP) → SETOF TIMESTAMP`**
+Generate occurrences from a bare RRULE with explicit start date.
+
+**`occurrences(rruleset_array RRULESET[], tsrange TSRANGE) → SETOF TIMESTAMP`**
+Generate occurrences from multiple rulesets.
+
+#### Query Functions
+
+**`first(rruleset RRULESET) → TIMESTAMP`**
+Get the first occurrence.
+
+```sql
+SELECT first('DTSTART:20260201T090000
+              RRULE:FREQ=DAILY;COUNT=10'::RRULESET);
+-- Returns: 2026-02-01 09:00:00
+```
+
+**`last(rruleset RRULESET) → TIMESTAMP`**
+Get the last occurrence (requires finite ruleset).
+
+```sql
+SELECT last('DTSTART:20260201T090000
+             RRULE:FREQ=DAILY;COUNT=10'::RRULESET);
+-- Returns: 2026-02-10 09:00:00
+```
+
+**`is_finite(rruleset RRULESET) → BOOLEAN`**
+Check if a ruleset has a defined end (COUNT or UNTIL).
+
+```sql
+SELECT is_finite('DTSTART:20260101T090000
+                  RRULE:FREQ=DAILY;COUNT=5'::RRULESET);
+-- Returns: true
+```
+
+**`after(rruleset RRULESET, timestamp TIMESTAMP) → TIMESTAMP`**
+Get the first occurrence after a given timestamp.
+
+**`before(rruleset RRULESET, timestamp TIMESTAMP) → TIMESTAMP`**
+Get the last occurrence before a given timestamp.
+
+#### Conversion Functions
+
+**`rrule(text TEXT) → RRULE`**
+Parse RRULE string to RRULE type.
+
+**`rruleset(text TEXT) → RRULESET`**
+Parse RRULESET string to RRULESET type.
+
+**`jsonb_to_rrule(input JSONB) → RRULE`**
+Convert JSONB to RRULE.
+
+**`jsonb_to_rruleset(input JSONB) → RRULESET`**
+Convert JSONB to RRULESET.
+
+**`rrule_to_jsonb(rrule RRULE) → JSONB`**
+Convert RRULE to JSONB.
+
+**`rruleset_to_jsonb(rruleset RRULESET) → JSONB`**
+Convert RRULESET to JSONB.
+
+### Supported RRULE Properties
+
+- `FREQ`: YEARLY, MONTHLY, WEEKLY, DAILY (required)
+- `INTERVAL`: Positive integer (default: 1)
+- `COUNT`: Number of occurrences (mutually exclusive with UNTIL)
+- `UNTIL`: End timestamp (mutually exclusive with COUNT)
+- `BYDAY`: Day of week (MO, TU, WE, TH, FR, SA, SU)
+- `BYMONTHDAY`: Day of month (1-31, -31 to -1)
+- `BYMONTH`: Month (1-12)
+- `BYYEARDAY`: Day of year (1-366, -366 to -1)
+- `BYWEEKNO`: Week of year (1-53, -53 to -1, only with FREQ=YEARLY)
+- `BYSETPOS`: Occurrence positions within the recurrence set
+- `WKST`: Week start day (default: MO)
 
 ## Testing
 
-Requires `pgTAP` and `pg_resolve`. First let's install those from CPAN.
+The test suite uses [pgTAP](https://pgtap.org/) for PostgreSQL unit testing.
 
-```
-  $ sudo cpan TAP::Parser::SourceHandler::pgTAP
+### Recommended: Docker Testing
+
+The easiest way to run tests is using Docker (see [Docker Development Environment](#docker-development-environment)):
+
+```bash
+make all    # Build and test
+# or
+make test   # Just run tests (if already built)
 ```
 
-Now you can run the tests with
+This provides a consistent, isolated testing environment with all dependencies pre-installed.
 
+### Local Testing
+
+If you prefer to run tests locally without Docker:
+
+#### Install Test Dependencies
+
+Install pgTAP from CPAN:
+
+```bash
+sudo cpan TAP::Parser::SourceHandler::pgTAP
 ```
-  $ make all test
+
+Install the pgTAP PostgreSQL extension in your test database:
+
+```bash
+make pgtap
+# Or manually:
+psql -c "CREATE EXTENSION pgtap;" -d your_test_database
 ```
+
+### Running Tests
+
+Run all tests:
+
+```bash
+make compile
+make local-execute
+make local-test
+```
+
+Or combined:
+
+```bash
+make local-all && make local-test
+```
+
+Run tests on a specific database:
+
+```bash
+make local-test PGHOST=localhost PGPORT=5432 PGUSER=testuser
+```
+
+### Test Structure
+
+Tests are organized in `tests/` directory:
+- `test_parser.sql` - RRULE string parsing
+- `test_occurrences.sql` - Occurrence generation
+- `test_contains_timestamp.sql` - Containment operators
+- `test_first.sql`, `test_last.sql` - First/last occurrence queries
+- `test_is_finite.sql` - Finite ruleset detection
+- Additional test files for specific features
+
+## Troubleshooting
+
+### Schema Not Found
+
+If you get errors about missing functions or types:
+
+```sql
+-- Make sure the _rrule schema is in your search path
+SET search_path TO public, _rrule;
+
+-- Or use fully qualified names
+SELECT _rrule.occurrences('...'::_rrule.RRULESET);
+```
+
+### Infinite Recurrence Error
+
+If you see errors about infinite recurrence:
+
+```sql
+-- ❌ This will fail (no COUNT or UNTIL)
+SELECT occurrences('DTSTART:20260101T090000
+                    RRULE:FREQ=DAILY'::RRULESET);
+
+-- ✅ Add COUNT or UNTIL
+SELECT occurrences('DTSTART:20260101T090000
+                    RRULE:FREQ=DAILY;COUNT=10'::RRULESET);
+```
+
+### Invalid RRULE Parameters
+
+Common validation errors:
+
+```sql
+-- BYWEEKNO only works with FREQ=YEARLY
+-- ❌ SELECT rrule('RRULE:FREQ=MONTHLY;BYWEEKNO=1');
+-- ✅ SELECT rrule('RRULE:FREQ=YEARLY;BYWEEKNO=1;COUNT=5');
+
+-- UNTIL and COUNT are mutually exclusive
+-- ❌ SELECT rrule('RRULE:FREQ=DAILY;UNTIL=20260201T090000;COUNT=5');
+-- ✅ SELECT rrule('RRULE:FREQ=DAILY;UNTIL=20260201T090000');
+
+-- INTERVAL must be positive
+-- ❌ SELECT rrule('RRULE:FREQ=DAILY;INTERVAL=0;COUNT=5');
+-- ✅ SELECT rrule('RRULE:FREQ=DAILY;INTERVAL=1;COUNT=5');
+```
+
+### Reinstalling the Extension
+
+**Docker (recommended):**
+```bash
+make rebuild  # Clean rebuild in Docker
+```
+
+**Local PostgreSQL:**
+```bash
+make local-clean  # Drop the _rrule schema
+make local-all    # Recompile and reinstall
+```
+
+## Additional Resources
+
+- [RFC 5545 - iCalendar Specification](https://tools.ietf.org/html/rfc5545)
+- [iCalendar RRULE Tool](https://icalendar.org/rrule-tool.html) - Test and visualize RRULE patterns
+- [pgTAP Documentation](https://pgtap.org/) - PostgreSQL testing framework
 
 ## Prior Art
 
-[Matthew Schinckel](https://bitbucket.org/schinckel/postgres-rrule).
+This extension is based on prior work by [Matthew Schinckel](https://bitbucket.org/schinckel/postgres-rrule). The original implementation provided the foundation for parsing and validating RRULE specifications in PostgreSQL.
+
+## Contributing
+
+This repository is in maintenance mode, but bug reports and pull requests are welcome:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes and add tests
+4. Run `make all test` to verify
+5. Submit a pull request
 
 ## License
 
 The MIT License (MIT)
 
-Copyright (c) 2015 Matthew Schinckel, 2019 Volkan Unsal
+Copyright (c) 2015 Matthew Schinckel
+Copyright (c) 2019 Volkan Unsal
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
