@@ -38,7 +38,8 @@ parse_commit() {
     local message=""
 
     # Match conventional commit format: type(scope): message or type: message
-    if [[ "$commit_msg" =~ ^([a-z]+)(\([^)]+\))?: ]]; then
+    local regex='^([a-z]+)(\([^)]+\))?:[[:space:]]'
+    if [[ "$commit_msg" =~ $regex ]]; then
         type="${BASH_REMATCH[1]}"
         scope="${BASH_REMATCH[2]}"
         message="${commit_msg#*: }"
