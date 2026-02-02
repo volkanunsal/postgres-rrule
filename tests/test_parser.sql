@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(11);
+SELECT plan(13);
 
 SET search_path TO _rrule, public;
 
@@ -78,6 +78,23 @@ SELECT throws_like(
     'my_thrower8',
     'INTERVAL must be a non-zero integer.',
     'INTERVAL must be a non-zero integer.'
+);
+
+-- Test EXRULE parsing
+SELECT is(
+    (rruleset('DTSTART:20230724T100000
+RRULE:FREQ=WEEKLY;BYDAY=MO,WE
+EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule",
+    '(WEEKLY,1,,,,,,"{MO,WE}",,,,,,MO)',
+    'EXRULE is parsed correctly'
+);
+
+SELECT is(
+    (rruleset('DTSTART:20230724T100000
+RRULE:FREQ=DAILY;COUNT=10
+EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule",
+    '(WEEKLY,1,,,,,,{FR},,,,,,MO)',
+    'EXRULE with different FREQ than RRULE is parsed correctly'
 );
 
 

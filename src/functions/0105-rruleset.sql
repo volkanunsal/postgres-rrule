@@ -17,10 +17,10 @@ DECLARE
   exdate_text text;
 BEGIN
   -- Extract line values
-  dtstart_text := _rrule.parse_line($1, 'DTSTART');
-  dtend_text := _rrule.parse_line($1, 'DTEND');
-  rdate_text := _rrule.parse_line($1, 'RDATE');
-  exdate_text := _rrule.parse_line($1, 'EXDATE');
+  dtstart_text := _rrule.extract_line($1, 'DTSTART');
+  dtend_text := _rrule.extract_line($1, 'DTEND');
+  rdate_text := _rrule.extract_line($1, 'RDATE');
+  exdate_text := _rrule.extract_line($1, 'EXDATE');
 
   -- Parse DTSTART with error handling
   IF dtstart_text IS NOT NULL THEN
@@ -43,8 +43,8 @@ BEGIN
   -- Parse RRULE and EXRULE
   result."rrule" := _rrule.rrule($1);
 
-  IF _rrule.parse_line($1, 'EXRULE') IS NOT NULL THEN
-    result."exrule" := _rrule.rrule(_rrule.parse_line($1, 'EXRULE'));
+  IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
+    result."exrule" := _rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'));
   END IF;
 
   -- Parse RDATE array with error handling

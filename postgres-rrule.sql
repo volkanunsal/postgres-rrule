@@ -134,7 +134,31 @@ RETURNS BOOLEAN AS $$
     COALESCE(months = seconds, TRUE)
   FROM factors;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;-- Extracts a line value from multiline input without splitting on semicolons.
+-- Similar to parse_line but returns the complete value as a single string.
+--
+-- Parameters:
+--   input - Multiline text input
+--   marker - Line prefix to search for (e.g., 'EXRULE', 'RRULE')
+--
+-- Returns: The value after the marker prefix, or NULL if not found
+CREATE OR REPLACE FUNCTION _rrule.extract_line (input TEXT, marker TEXT)
+RETURNS TEXT AS $$
+  -- Clear spaces at the front of the lines
+  WITH trimmed_input as (SELECT regexp_replace(input, '^\s*',  '', 'ng') "r"),
+  -- Clear all lines except the ones starting with marker
+  filtered_lines as (SELECT regexp_replace(trimmed_input."r", '^(?!' || marker || ').*?$',  '', 'ng') "r" FROM trimmed_input),
+  -- Replace carriage returns with blank space.
+  normalized_text as (SELECT regexp_replace(filtered_lines."r", E'[\\n\\r]+',  '', 'g') "r" FROM filtered_lines),
+  -- Remove marker prefix.
+  marker_removed as (SELECT regexp_replace(normalized_text."r", marker || ':(.*)$', '\1') "r" FROM normalized_text),
+  -- Trim
+  trimmed_result as (SELECT trim(marker_removed."r") "r" FROM marker_removed)
+  SELECT "r"
+  FROM trimmed_result
+  WHERE "r" != '';
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
 RETURNS SETOF TEXT AS $$
   -- Clear spaces at the front of the lines
   WITH trimmed_input as (SELECT regexp_replace(input, '^\s*',  '', 'ng') "r"),
@@ -585,10 +609,10 @@ DECLARE
   exdate_text text;
 BEGIN
   -- Extract line values
-  dtstart_text := _rrule.parse_line($1, 'DTSTART');
-  dtend_text := _rrule.parse_line($1, 'DTEND');
-  rdate_text := _rrule.parse_line($1, 'RDATE');
-  exdate_text := _rrule.parse_line($1, 'EXDATE');
+  dtstart_text := _rrule.extract_line($1, 'DTSTART');
+  dtend_text := _rrule.extract_line($1, 'DTEND');
+  rdate_text := _rrule.extract_line($1, 'RDATE');
+  exdate_text := _rrule.extract_line($1, 'EXDATE');
 
   -- Parse DTSTART with error handling
   IF dtstart_text IS NOT NULL THEN
@@ -611,8 +635,8 @@ BEGIN
   -- Parse RRULE and EXRULE
   result."rrule" := _rrule.rrule($1);
 
-  IF _rrule.parse_line($1, 'EXRULE') IS NOT NULL THEN
-    result."exrule" := _rrule.rrule(_rrule.parse_line($1, 'EXRULE'));
+  IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
+    result."exrule" := _rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'));
   END IF;
 
   -- Parse RDATE array with error handling
