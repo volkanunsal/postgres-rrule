@@ -45,8 +45,8 @@ CREATE TABLE _rrule.RRULE (
 CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "dtend" TIMESTAMP,
-  "rrule" _rrule.RRULE,
-  "exrule" _rrule.RRULE,
+  "rrule" _rrule.RRULE[],  -- RFC 5545: Multiple RRULEs allowed
+  "exrule" _rrule.RRULE[],  -- RFC 5545: Multiple EXRULEs allowed
   "rdate" TIMESTAMP[],
   "exdate" TIMESTAMP[]
 );

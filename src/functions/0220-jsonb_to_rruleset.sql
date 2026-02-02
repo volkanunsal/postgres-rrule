@@ -2,9 +2,11 @@
 --
 -- Parameters:
 --   input - JSONB object with rruleset fields (dtstart, dtend, rrule, exrule, rdate, exdate)
---           Example: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--           Example single rule: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--           Example multi-rule: '{"dtstart": "2026-01-01T09:00:00", "rrule": [{"freq": "WEEKLY", "byday": ["MO"]}, {"freq": "DAILY", "interval": 3}]}'
 --
 -- Returns: RRULESET type with validated timestamps and rules
+-- Note: Supports both single rule (object) and multiple rules (array) for backwards compatibility
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE
@@ -13,16 +15,18 @@ DECLARE
   dtend_text text;
   rdate_text text[];
   exdate_text text[];
+  rrule_json jsonb;
+  exrule_json jsonb;
 BEGIN
   -- Extract text values first for better error messages
   SELECT
     "dtstart",
     "dtend",
-    _rrule.jsonb_to_rrule("rrule") "rrule",
-    _rrule.jsonb_to_rrule("exrule") "exrule",
+    "rrule",
+    "exrule",
     "rdate",
     "exdate"
-  INTO dtstart_text, dtend_text, result."rrule", result."exrule", rdate_text, exdate_text
+  INTO dtstart_text, dtend_text, rrule_json, exrule_json, rdate_text, exdate_text
   FROM jsonb_to_record("input") as x(
     "dtstart" text,
     "dtend" text,
@@ -31,6 +35,34 @@ BEGIN
     "rdate" text[],
     "exdate" text[]
   );
+
+  -- Parse RRULE (support both single object and array for backwards compatibility)
+  IF rrule_json IS NOT NULL THEN
+    IF jsonb_typeof(rrule_json) = 'array' THEN
+      -- Handle array of rules
+      result."rrule" := ARRAY(
+        SELECT _rrule.jsonb_to_rrule(rrule_elem)
+        FROM jsonb_array_elements(rrule_json) AS rrule_elem
+      );
+    ELSE
+      -- Handle single rule (backwards compatibility)
+      result."rrule" := ARRAY[_rrule.jsonb_to_rrule(rrule_json)];
+    END IF;
+  END IF;
+
+  -- Parse EXRULE (support both single object and array)
+  IF exrule_json IS NOT NULL THEN
+    IF jsonb_typeof(exrule_json) = 'array' THEN
+      -- Handle array of rules
+      result."exrule" := ARRAY(
+        SELECT _rrule.jsonb_to_rrule(exrule_elem)
+        FROM jsonb_array_elements(exrule_json) AS exrule_elem
+      );
+    ELSE
+      -- Handle single rule (backwards compatibility)
+      result."exrule" := ARRAY[_rrule.jsonb_to_rrule(exrule_json)];
+    END IF;
+  END IF;
 
   -- Validate DTSTART presence
   IF dtstart_text IS NULL THEN

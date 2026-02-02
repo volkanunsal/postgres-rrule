@@ -78,42 +78,33 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- Generates occurrences for a ruleset within a time range, including RDATE and excluding EXDATE.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   rruleset - The ruleset containing RRULE[], DTSTART, DTEND, RDATE, EXDATE, EXRULE[]
 --   tsrange  - Time range to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
 --
 -- Returns: Set of timestamps within the range, with RDATE included and EXDATE/EXRULE excluded
+-- Note: Multiple RRULEs are combined (UNION), multiple EXRULEs are combined (UNION)
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-  WITH "rrules" AS (
-    SELECT
-      "rruleset"."dtstart",
-      "rruleset"."dtend",
-      "rruleset"."rrule"
-  ),
-  "rdates" AS (
-    SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence"
-    FROM "rrules"
+  SELECT "occurrence" FROM (
+    -- Generate occurrences from all RRULEs
+    SELECT _rrule.occurrences(r, $1."dtstart", $2) AS "occurrence"
+    FROM unnest($1."rrule") AS r
     UNION
-    SELECT unnest("rruleset"."rdate") AS "occurrence"
-  ),
-  "exrules" AS (
-    SELECT
-      "rruleset"."dtstart",
-      "rruleset"."dtend",
-      "rruleset"."exrule"
-  ),
-  "exdates" AS (
-    SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence"
-    FROM "exrules"
-    UNION
-    SELECT unnest("rruleset"."exdate") AS "occurrence"
-  )
-  SELECT "occurrence" FROM "rdates"
+    -- Add RDATE occurrences
+    SELECT d AS "occurrence" FROM unnest($1."rdate") AS d
+  ) AS rdates("occurrence")
   EXCEPT
-  SELECT "occurrence" FROM "exdates"
+  SELECT "occurrence" FROM (
+    -- Generate exclusions from all EXRULEs
+    SELECT _rrule.occurrences(e, $1."dtstart", $2) AS "occurrence"
+    FROM unnest($1."exrule") AS e
+    UNION
+    -- Add EXDATE exclusions
+    SELECT d AS "occurrence" FROM unnest($1."exdate") AS d
+  ) AS exdates("occurrence")
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
@@ -123,7 +114,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- NOT the end of the recurrence series. Use UNTIL or COUNT in the RRULE to limit occurrences.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   rruleset - The ruleset containing RRULE[], DTSTART, DTEND, RDATE, EXDATE, EXRULE[]
 --
 -- Returns: Set of all timestamps with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)

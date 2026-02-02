@@ -75,8 +75,8 @@ CREATE TABLE _rrule.RRULE (
 CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "dtend" TIMESTAMP,
-  "rrule" _rrule.RRULE,
-  "exrule" _rrule.RRULE,
+  "rrule" _rrule.RRULE[],  -- RFC 5545: Multiple RRULEs allowed
+  "exrule" _rrule.RRULE[],  -- RFC 5545: Multiple EXRULEs allowed
   "rdate" TIMESTAMP[],
   "exdate" TIMESTAMP[]
 );
@@ -789,42 +789,33 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- Generates occurrences for a ruleset within a time range, including RDATE and excluding EXDATE.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   rruleset - The ruleset containing RRULE[], DTSTART, DTEND, RDATE, EXDATE, EXRULE[]
 --   tsrange  - Time range to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
 --
 -- Returns: Set of timestamps within the range, with RDATE included and EXDATE/EXRULE excluded
+-- Note: Multiple RRULEs are combined (UNION), multiple EXRULEs are combined (UNION)
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
   "tsrange" TSRANGE
 )
 RETURNS SETOF TIMESTAMP AS $$
-  WITH "rrules" AS (
-    SELECT
-      "rruleset"."dtstart",
-      "rruleset"."dtend",
-      "rruleset"."rrule"
-  ),
-  "rdates" AS (
-    SELECT _rrule.occurrences("rrule", "dtstart", "tsrange") AS "occurrence"
-    FROM "rrules"
+  SELECT "occurrence" FROM (
+    -- Generate occurrences from all RRULEs
+    SELECT _rrule.occurrences(r, $1."dtstart", $2) AS "occurrence"
+    FROM unnest($1."rrule") AS r
     UNION
-    SELECT unnest("rruleset"."rdate") AS "occurrence"
-  ),
-  "exrules" AS (
-    SELECT
-      "rruleset"."dtstart",
-      "rruleset"."dtend",
-      "rruleset"."exrule"
-  ),
-  "exdates" AS (
-    SELECT _rrule.occurrences("exrule", "dtstart", "tsrange") AS "occurrence"
-    FROM "exrules"
-    UNION
-    SELECT unnest("rruleset"."exdate") AS "occurrence"
-  )
-  SELECT "occurrence" FROM "rdates"
+    -- Add RDATE occurrences
+    SELECT d AS "occurrence" FROM unnest($1."rdate") AS d
+  ) AS rdates("occurrence")
   EXCEPT
-  SELECT "occurrence" FROM "exdates"
+  SELECT "occurrence" FROM (
+    -- Generate exclusions from all EXRULEs
+    SELECT _rrule.occurrences(e, $1."dtstart", $2) AS "occurrence"
+    FROM unnest($1."exrule") AS e
+    UNION
+    -- Add EXDATE exclusions
+    SELECT d AS "occurrence" FROM unnest($1."exdate") AS d
+  ) AS exdates("occurrence")
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
@@ -834,7 +825,7 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- NOT the end of the recurrence series. Use UNTIL or COUNT in the RRULE to limit occurrences.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   rruleset - The ruleset containing RRULE[], DTSTART, DTEND, RDATE, EXDATE, EXRULE[]
 --
 -- Returns: Set of all timestamps with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
@@ -1176,9 +1167,11 @@ $$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 --
 -- Parameters:
 --   input - JSONB object with rruleset fields (dtstart, dtend, rrule, exrule, rdate, exdate)
---           Example: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--           Example single rule: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--           Example multi-rule: '{"dtstart": "2026-01-01T09:00:00", "rrule": [{"freq": "WEEKLY", "byday": ["MO"]}, {"freq": "DAILY", "interval": 3}]}'
 --
 -- Returns: RRULESET type with validated timestamps and rules
+-- Note: Supports both single rule (object) and multiple rules (array) for backwards compatibility
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE
@@ -1187,16 +1180,18 @@ DECLARE
   dtend_text text;
   rdate_text text[];
   exdate_text text[];
+  rrule_json jsonb;
+  exrule_json jsonb;
 BEGIN
   -- Extract text values first for better error messages
   SELECT
     "dtstart",
     "dtend",
-    _rrule.jsonb_to_rrule("rrule") "rrule",
-    _rrule.jsonb_to_rrule("exrule") "exrule",
+    "rrule",
+    "exrule",
     "rdate",
     "exdate"
-  INTO dtstart_text, dtend_text, result."rrule", result."exrule", rdate_text, exdate_text
+  INTO dtstart_text, dtend_text, rrule_json, exrule_json, rdate_text, exdate_text
   FROM jsonb_to_record("input") as x(
     "dtstart" text,
     "dtend" text,
@@ -1205,6 +1200,34 @@ BEGIN
     "rdate" text[],
     "exdate" text[]
   );
+
+  -- Parse RRULE (support both single object and array for backwards compatibility)
+  IF rrule_json IS NOT NULL THEN
+    IF jsonb_typeof(rrule_json) = 'array' THEN
+      -- Handle array of rules
+      result."rrule" := ARRAY(
+        SELECT _rrule.jsonb_to_rrule(rrule_elem)
+        FROM jsonb_array_elements(rrule_json) AS rrule_elem
+      );
+    ELSE
+      -- Handle single rule (backwards compatibility)
+      result."rrule" := ARRAY[_rrule.jsonb_to_rrule(rrule_json)];
+    END IF;
+  END IF;
+
+  -- Parse EXRULE (support both single object and array)
+  IF exrule_json IS NOT NULL THEN
+    IF jsonb_typeof(exrule_json) = 'array' THEN
+      -- Handle array of rules
+      result."exrule" := ARRAY(
+        SELECT _rrule.jsonb_to_rrule(exrule_elem)
+        FROM jsonb_array_elements(exrule_json) AS exrule_elem
+      );
+    ELSE
+      -- Handle single rule (backwards compatibility)
+      result."exrule" := ARRAY[_rrule.jsonb_to_rrule(exrule_json)];
+    END IF;
+  END IF;
 
   -- Validate DTSTART presence
   IF dtstart_text IS NULL THEN
@@ -1280,20 +1303,28 @@ $$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_to_jsonb("input" _rrule.RRULESET)
 RETURNS jsonb AS $$
 DECLARE
-  rrule jsonb;
-  exrule jsonb;
+  rrule_array jsonb;
+  exrule_array jsonb;
 BEGIN
-  SELECT _rrule.rrule_to_jsonb("input"."rrule")
-  INTO rrule;
+  -- Convert RRULE array to JSONB array
+  IF "input"."rrule" IS NOT NULL AND array_length("input"."rrule", 1) > 0 THEN
+    SELECT jsonb_agg(_rrule.rrule_to_jsonb(r))
+    INTO rrule_array
+    FROM unnest("input"."rrule") AS r;
+  END IF;
 
-  SELECT _rrule.rrule_to_jsonb("input"."exrule")
-  INTO exrule;
+  -- Convert EXRULE array to JSONB array
+  IF "input"."exrule" IS NOT NULL AND array_length("input"."exrule", 1) > 0 THEN
+    SELECT jsonb_agg(_rrule.rrule_to_jsonb(e))
+    INTO exrule_array
+    FROM unnest("input"."exrule") AS e;
+  END IF;
 
   RETURN jsonb_strip_nulls(jsonb_build_object(
     'dtstart', "input"."dtstart",
     'dtend', "input"."dtend",
-    'rrule', rrule,
-    'exrule', exrule,
+    'rrule', rrule_array,
+    'exrule', exrule_array,
     'rdate', "input"."rdate",
     'exdate', "input"."exdate"
   ));
