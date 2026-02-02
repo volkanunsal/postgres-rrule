@@ -44,7 +44,7 @@ jobs:
         env:
           PGPASSWORD: unsafe
       - name: Run tests
-        run: make local-test
+        run: make ci-test
         env:
           PGHOST: localhost
           PGPASSWORD: unsafe

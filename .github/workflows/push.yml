@@ -88,7 +88,7 @@ jobs:
       - name: 🧪 Run test suite
         run: |
           echo "Running tests against PostgreSQL ${{ matrix.pg-version }}..."
-          make local-test
+          make ci-test
         env:
           PGHOST: localhost
           PGPASSWORD: unsafe
