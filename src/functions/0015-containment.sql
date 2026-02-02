@@ -12,9 +12,9 @@ RETURNS BOOLEAN AS $$
   SELECT _rrule.interval_contains(interval1, interval2)
     AND COALESCE($1."wkst" = $2."wkst", true)
   FROM intervals;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.contains($2, $1);
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;

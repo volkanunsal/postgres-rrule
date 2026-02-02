@@ -12,4 +12,4 @@ RETURNS _rrule.RRULESET AS $$
     (SELECT _rrule.rrule("x"::text) "rrule" FROM "exrule-line") as "exrule",
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "rdate-line" AS "rdate"),
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "exdate-line" AS "exdate");
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;

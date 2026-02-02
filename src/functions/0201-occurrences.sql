@@ -37,21 +37,21 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "row_number" <= "rrule"."count"
   OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
   FROM _rrule.occurrences("rrule", "dtstart") "occurrence"
   WHERE "occurrence" <@ "between";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" TEXT, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
   FROM _rrule.occurrences(_rrule.rrule("rrule"), "dtstart") "occurrence"
   WHERE "occurrence" <@ "between";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
@@ -86,12 +86,12 @@ RETURNS SETOF TIMESTAMP AS $$
   EXCEPT
   SELECT "occurrence" FROM "exdates"
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns all occurrences from an array of rulesets within a given time range.
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
@@ -121,4 +121,4 @@ BEGIN
 
   RETURN QUERY EXECUTE q;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;

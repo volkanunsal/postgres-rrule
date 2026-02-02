@@ -19,4 +19,4 @@ BEGIN
     'exdate', "input"."exdate"
   ));
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;

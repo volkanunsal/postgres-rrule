@@ -4,22 +4,22 @@
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT "rrule"."count" IS NOT NULL OR "rrule"."until" IS NOT NULL;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" TEXT)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite(_rrule.rrule("rrule"));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite("rruleset"."rrule")
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
 RETURNS BOOLEAN AS $$
   SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
   FROM unnest("rruleset_array") AS item;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 

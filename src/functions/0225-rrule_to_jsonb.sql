@@ -18,4 +18,4 @@ BEGIN
     'wkst', "input"."wkst"
   ));
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;

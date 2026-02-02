@@ -5,19 +5,19 @@ RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rrule", "dtstart") occurrence
   ORDER BY occurrence DESC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT _rrule.last(_rrule.rrule("rrule"), "dtstart");
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset") occurrence
   ORDER BY occurrence DESC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns the last occurrence from an array of rulesets.
 -- Returns NULL if the ruleset array contains infinite recurrence rules.
@@ -32,5 +32,5 @@ BEGIN
     RETURN QUERY SELECT NULL::TIMESTAMP;
   END IF;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 

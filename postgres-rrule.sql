@@ -95,7 +95,7 @@ RETURNS _rrule.EXPLODED_INTERVAL AS $$
       EXTRACT(HOUR FROM $1) * 3600 + EXTRACT(MINUTE FROM $1) * 60 + EXTRACT(SECOND FROM $1)
     )::_rrule.EXPLODED_INTERVAL;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.factor(INTEGER, INTEGER)
@@ -108,7 +108,7 @@ RETURNS INTEGER AS $$
       ELSE $1 / $2
     END;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.interval_contains(INTERVAL, INTERVAL)
@@ -134,7 +134,7 @@ RETURNS BOOLEAN AS $$
     COALESCE(months = seconds, TRUE)
   FROM factors;
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
 RETURNS SETOF TEXT AS $$
   -- Clear spaces at the front of the lines
   WITH trimmed_input as (SELECT regexp_replace(input, '^\s*',  '', 'ng') "r"),
@@ -152,7 +152,7 @@ RETURNS SETOF TEXT AS $$
   SELECT "r" AS "y"
   FROM split_pairs
   WHERE "r" != '';
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.timestamp_to_day("ts" TIMESTAMP) RETURNS _rrule.DAY AS $$
   SELECT CAST(CASE to_char("ts", 'DY')
     WHEN 'MON' THEN 'MO'
@@ -163,7 +163,7 @@ CREATE OR REPLACE FUNCTION _rrule.timestamp_to_day("ts" TIMESTAMP) RETURNS _rrul
     WHEN 'SAT' THEN 'SA'
     WHEN 'SUN' THEN 'SU'
   END as _rrule.DAY);
-$$ LANGUAGE SQL IMMUTABLE;
+$$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
 
 CREATE CAST (TIMESTAMP AS _rrule.DAY)
   WITH FUNCTION _rrule.timestamp_to_day(TIMESTAMP)
@@ -174,12 +174,12 @@ RETURNS INTEGER AS $$
         FROM unnest(enum_range($1)) "value"
     ) x
     WHERE "value" = $1;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 COMMENT ON FUNCTION _rrule.enum_index_of(anyenum) IS 'Given an ENUM value, return it''s index.';
 CREATE OR REPLACE FUNCTION _rrule.integer_array (TEXT)
 RETURNS integer[] AS $$
   SELECT ('{' || $1 || '}')::integer[];
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 COMMENT ON FUNCTION _rrule.integer_array (text) IS 'Coerce a text string into an array of integers';
 
 
@@ -187,7 +187,7 @@ COMMENT ON FUNCTION _rrule.integer_array (text) IS 'Coerce a text string into an
 CREATE OR REPLACE FUNCTION _rrule.day_array (TEXT)
 RETURNS _rrule.DAY[] AS $$
   SELECT ('{' || $1 || '}')::_rrule.DAY[];
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 COMMENT ON FUNCTION _rrule.day_array (text) IS 'Coerce a text string into an array of "rrule"."day"';
 
 
@@ -196,7 +196,7 @@ CREATE OR REPLACE FUNCTION _rrule.array_join(ANYARRAY, "delimiter" TEXT)
 RETURNS TEXT AS $$
   SELECT string_agg(x::text, "delimiter")
   FROM unnest($1) x;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.explode(_rrule.RRULE)
 RETURNS SETOF _rrule.RRULE AS 'SELECT $1' LANGUAGE SQL IMMUTABLE STRICT;
@@ -206,7 +206,7 @@ RETURNS BOOLEAN AS $$
   SELECT count(*) = 1 FROM (
     SELECT * FROM _rrule.explode($1) UNION SELECT * FROM _rrule.explode($2)
   ) AS x;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 
 
@@ -215,19 +215,19 @@ RETURNS BOOLEAN AS $$
   SELECT count(*) = 2 FROM (
     SELECT * FROM _rrule.explode($1) UNION SELECT * FROM _rrule.explode($2)
   ) AS x;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.build_interval("interval" INTEGER, "freq" _rrule.FREQ)
 RETURNS INTERVAL AS $$
   -- Transform ical time interval enums into Postgres intervals, e.g.
   -- "WEEKLY" becomes "WEEKS".
   SELECT ("interval" || ' ' || regexp_replace(regexp_replace("freq"::TEXT, 'LY', 'S'), 'IS', 'YS'))::INTERVAL;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.build_interval(_rrule.RRULE)
 RETURNS INTERVAL AS $$
   SELECT _rrule.build_interval(COALESCE($1."interval", 1), $1."freq");
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- rrule containment.
 -- intervals must be compatible.
 -- wkst must match
@@ -242,12 +242,12 @@ RETURNS BOOLEAN AS $$
   SELECT _rrule.interval_contains(interval1, interval2)
     AND COALESCE($1."wkst" = $2."wkst", true)
   FROM intervals;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.contains($2, $1);
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.until("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT min("until")
@@ -257,7 +257,7 @@ RETURNS TIMESTAMP AS $$
     SELECT "dtstart" + _rrule.build_interval("rrule"."interval", "rrule"."freq") * COALESCE("rrule"."count", CASE WHEN "rrule"."until" IS NOT NULL THEN NULL ELSE 1 END) AS "until"
   ) "until" GROUP BY ();
 
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 COMMENT ON FUNCTION _rrule.until(_rrule.RRULE, TIMESTAMP) IS 'The calculated "until"" timestamp for the given rrule+dtstart';
 
 -- Computes all possible starting timestamps for a recurrence rule within its first cycle.
@@ -354,7 +354,7 @@ BEGIN
   ORDER BY "ts";
 
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 -- Helper function to check if an RRULE has any BY* parameters set.
 -- Used for BYSETPOS validation which requires at least one other BY* parameter.
 CREATE OR REPLACE FUNCTION _rrule.has_any_by_rule(r _rrule.RRULE)
@@ -369,7 +369,7 @@ RETURNS BOOLEAN AS $$
     r."byminute" IS NOT NULL OR
     r."bysecond" IS NOT NULL
   );
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.validate_rrule (result _rrule.RRULE)
 RETURNS void AS $$
 BEGIN
@@ -455,7 +455,7 @@ BEGIN
     RAISE EXCEPTION 'BYSETPOS cannot be an empty array.';
   END IF;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
@@ -507,7 +507,7 @@ BEGIN
 
   RETURN result;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.text(_rrule.RRULE)
@@ -529,7 +529,7 @@ RETURNS TEXT AS $$
     || COALESCE('BYSETPOS=' || _rrule.array_join($1."bysetpos", ',') || ';', '')
     || CASE WHEN $1."wkst" = 'MO' THEN '' ELSE COALESCE('WKST=' || $1."wkst" || ';', '') END
   , ';$', '');
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
   WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),
@@ -544,30 +544,30 @@ RETURNS _rrule.RRULESET AS $$
     (SELECT _rrule.rrule("x"::text) "rrule" FROM "exrule-line") as "exrule",
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "rdate-line" AS "rdate"),
     (SELECT (regexp_split_to_array("x"::text, ','))::TIMESTAMP[] from "exdate-line" AS "exdate");
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT "rrule"."count" IS NOT NULL OR "rrule"."until" IS NOT NULL;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" TEXT)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite(_rrule.rrule("rrule"));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite("rruleset"."rrule")
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
 RETURNS BOOLEAN AS $$
   SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
   FROM unnest("rruleset_array") AS item;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
 
@@ -609,21 +609,21 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "row_number" <= "rrule"."count"
   OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
   FROM _rrule.occurrences("rrule", "dtstart") "occurrence"
   WHERE "occurrence" <@ "between";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" TEXT, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
   FROM _rrule.occurrences(_rrule.rrule("rrule"), "dtstart") "occurrence"
   WHERE "occurrence" <@ "between";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
@@ -658,12 +658,12 @@ RETURNS SETOF TIMESTAMP AS $$
   EXCEPT
   SELECT "occurrence" FROM "exdates"
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns all occurrences from an array of rulesets within a given time range.
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
@@ -693,7 +693,7 @@ BEGIN
 
   RETURN QUERY EXECUTE q;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
   RETURN (SELECT "ts"
@@ -702,26 +702,26 @@ BEGIN
   ORDER BY "ts" ASC
   LIMIT 1);
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT _rrule.first(_rrule.rrule("rrule"), "dtstart");
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset") occurrence
   ORDER BY occurrence ASC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset_array" _rrule.RRULESET[])
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset_array", '(,)'::TSRANGE) occurrence
   ORDER BY occurrence ASC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
@@ -729,19 +729,19 @@ RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rrule", "dtstart") occurrence
   ORDER BY occurrence DESC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT _rrule.last(_rrule.rrule("rrule"), "dtstart");
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
   FROM _rrule.occurrences("rruleset") occurrence
   ORDER BY occurrence DESC LIMIT 1;
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns the last occurrence from an array of rulesets.
 -- Returns NULL if the ruleset array contains infinite recurrence rules.
@@ -756,7 +756,7 @@ BEGIN
     RETURN QUERY SELECT NULL::TIMESTAMP;
   END IF;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
 
 CREATE OR REPLACE FUNCTION _rrule.before(
@@ -767,25 +767,25 @@ CREATE OR REPLACE FUNCTION _rrule.before(
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rrule", "dtstart", tsrange(NULL, "when", '[]'));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.before("rrule" TEXT, "dtstart" TIMESTAMP, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.before(_rrule.rrule("rrule"), "dtstart", "when");
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns all occurrences from an array of rulesets that occur before a given timestamp.
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset_array", tsrange(NULL, "when", '[]'));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
 
@@ -797,7 +797,7 @@ CREATE OR REPLACE FUNCTION _rrule.after(
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rrule", "dtstart", tsrange("when", NULL));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.after(
   "rrule" TEXT,
@@ -806,20 +806,20 @@ CREATE OR REPLACE FUNCTION _rrule.after(
 )
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.after(_rrule.rrule("rrule"), "dtstart", "when");
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Returns all occurrences from an array of rulesets that occur after a given timestamp.
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset_array", tsrange("when", NULL));
-$$ LANGUAGE SQL STRICT IMMUTABLE;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
@@ -835,7 +835,7 @@ BEGIN
 
   RETURN inSet;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rrule("input" jsonb)
 RETURNS _rrule.RRULE AS $$
 DECLARE
@@ -884,7 +884,7 @@ BEGIN
 
   RETURN result;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE
@@ -918,12 +918,12 @@ BEGIN
 
   RETURN result;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset_array("input" jsonb)
 RETURNS _rrule.RRULESET[] AS $$
   SELECT COALESCE(array_agg(_rrule.jsonb_to_rruleset(item)), '{}'::_rrule.RRULESET[])
   FROM jsonb_array_elements("input") AS item;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rrule_to_jsonb("input" _rrule.RRULE)
 RETURNS jsonb AS $$
 BEGIN
@@ -944,7 +944,7 @@ BEGIN
     'wkst', "input"."wkst"
   ));
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_to_jsonb("input" _rrule.RRULESET)
 RETURNS jsonb AS $$
 DECLARE
@@ -966,25 +966,25 @@ BEGIN
     'exdate', "input"."exdate"
   ));
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_to_jsonb("input" _rrule.RRULESET[])
 RETURNS jsonb AS $$
   SELECT COALESCE(jsonb_agg(_rrule.rruleset_to_jsonb(item)), '[]'::jsonb)
   FROM unnest("input") AS item;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_contains_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT COALESCE(bool_or(_rrule.contains_timestamp(item, $2)), false)
   FROM unnest($1) AS item;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_has_after_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT count(*) > 0 FROM _rrule.after($1, $2) LIMIT 1;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_has_before_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT count(*) > 0 FROM _rrule.before($1, $2) LIMIT 1;
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_after_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT EXISTS(
@@ -992,7 +992,7 @@ RETURNS BOOLEAN AS $$
     FROM unnest($1) AS item
     WHERE EXISTS(SELECT 1 FROM _rrule.after(item, $2) LIMIT 1)
   );
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_before_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT EXISTS(
@@ -1000,7 +1000,7 @@ RETURNS BOOLEAN AS $$
     FROM unnest($1) AS item
     WHERE EXISTS(SELECT 1 FROM _rrule.before(item, $2) LIMIT 1)
   );
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- Additional function documentation for public API functions
 -- This supplements existing COMMENT statements in individual function files
 

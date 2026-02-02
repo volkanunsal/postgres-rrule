@@ -18,4 +18,4 @@ RETURNS TEXT AS $$
     || COALESCE('BYSETPOS=' || _rrule.array_join($1."bysetpos", ',') || ';', '')
     || CASE WHEN $1."wkst" = 'MO' THEN '' ELSE COALESCE('WKST=' || $1."wkst" || ';', '') END
   , ';$', '');
-$$ LANGUAGE SQL IMMUTABLE STRICT;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
