@@ -1,3 +1,10 @@
+-- Parses an RRULE string into an RRULE type. Validates according to RFC 5545.
+--
+-- Parameters:
+--   text - RRULE string with format "RRULE:FREQ=DAILY;COUNT=10;..."
+--          Example: "RRULE:FREQ=WEEKLY;BYDAY=MO,FR;COUNT=10"
+--
+-- Returns: RRULE type with parsed and validated fields
 CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE

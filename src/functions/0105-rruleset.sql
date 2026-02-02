@@ -1,3 +1,11 @@
+-- Parses a multiline RRULESET string into an RRULESET type.
+--
+-- Parameters:
+--   text - Multiline string with DTSTART, RRULE, EXRULE, RDATE, EXDATE lines
+--          Example: 'DTSTART:19970902T090000
+--                    RRULE:FREQ=DAILY;COUNT=10'
+--
+-- Returns: RRULESET type with parsed DTSTART, RRULE, and optional DTEND, EXRULE, RDATE, EXDATE
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
   WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),

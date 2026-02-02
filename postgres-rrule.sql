@@ -455,7 +455,14 @@ BEGIN
     RAISE EXCEPTION 'BYSETPOS cannot be an empty array.';
   END IF;
 END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;-- Parses an RRULE string into an RRULE type. Validates according to RFC 5545.
+--
+-- Parameters:
+--   text - RRULE string with format "RRULE:FREQ=DAILY;COUNT=10;..."
+--          Example: "RRULE:FREQ=WEEKLY;BYDAY=MO,FR;COUNT=10"
+--
+-- Returns: RRULE type with parsed and validated fields
+CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
 RETURNS _rrule.RRULE AS $$
 DECLARE
   result _rrule.RRULE;
@@ -530,6 +537,14 @@ RETURNS TEXT AS $$
     || CASE WHEN $1."wkst" = 'MO' THEN '' ELSE COALESCE('WKST=' || $1."wkst" || ';', '') END
   , ';$', '');
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+-- Parses a multiline RRULESET string into an RRULESET type.
+--
+-- Parameters:
+--   text - Multiline string with DTSTART, RRULE, EXRULE, RDATE, EXDATE lines
+--          Example: 'DTSTART:19970902T090000
+--                    RRULE:FREQ=DAILY;COUNT=10'
+--
+-- Returns: RRULESET type with parsed DTSTART, RRULE, and optional DTEND, EXRULE, RDATE, EXDATE
 CREATE OR REPLACE FUNCTION _rrule.rruleset (TEXT)
 RETURNS _rrule.RRULESET AS $$
   WITH "dtstart-line" AS (SELECT _rrule.parse_line($1::text, 'DTSTART') as "x"),
@@ -548,21 +563,45 @@ $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 -- All of the function(rrule, ...) forms also accept a text argument, which will
 -- be parsed using the RFC-compliant parser.
 
+-- Returns true if the recurrence rule has a defined end (COUNT or UNTIL).
+--
+-- Parameters:
+--   rrule - The recurrence rule to check
+--
+-- Returns: True if the rule has COUNT or UNTIL set, false if it recurs infinitely
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT "rrule"."count" IS NOT NULL OR "rrule"."until" IS NOT NULL;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns true if the recurrence rule (parsed from text) has a defined end.
+--
+-- Parameters:
+--   rrule - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--
+-- Returns: True if the rule has COUNT or UNTIL set
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule" TEXT)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite(_rrule.rrule("rrule"));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns true if the ruleset has a defined end.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE and optional EXRULE
+--
+-- Returns: True if the RRULE has COUNT or UNTIL set
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
   SELECT _rrule.is_finite("rruleset"."rrule")
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns true if any ruleset in the array has a defined end.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to check
+--
+-- Returns: True if at least one ruleset has COUNT or UNTIL set
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
 RETURNS BOOLEAN AS $$
   SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
@@ -570,7 +609,13 @@ RETURNS BOOLEAN AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
-
+-- Generates all occurrences for a recurrence rule.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern (frequency, interval, BY* constraints)
+--   dtstart - The starting timestamp from which to generate occurrences
+--
+-- Returns: Set of timestamps representing each occurrence
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP
@@ -611,6 +656,14 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a recurrence rule within a specific time range.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp from which to generate occurrences
+--   between - Time range (tsrange) to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
+--
+-- Returns: Set of timestamps within the specified range
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -618,6 +671,14 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "occurrence" <@ "between";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a recurrence rule (parsed from text) within a time range.
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp from which to generate occurrences
+--   between - Time range (tsrange) to filter occurrences
+--
+-- Returns: Set of timestamps within the specified range
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" TEXT, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -625,6 +686,13 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "occurrence" <@ "between";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a ruleset within a time range, including RDATE and excluding EXDATE.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   tsrange  - Time range to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
+--
+-- Returns: Set of timestamps within the range, with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
   "tsrange" TSRANGE
@@ -660,12 +728,24 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates all occurrences for a ruleset (unbounded time range).
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--
+-- Returns: Set of all timestamps with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns all occurrences from an array of rulesets within a given time range.
+-- Generates all occurrences from multiple rulesets within a time range.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--   tsrange        - Time range to filter occurrences
+--
+-- Returns: Combined set of timestamps from all rulesets, sorted chronologically
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset_array" _rrule.RRULESET[],
   "tsrange" TSRANGE
@@ -693,7 +773,14 @@ BEGIN
 
   RETURN QUERY EXECUTE q;
 END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;-- Returns the first occurrence of a recurrence rule.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp from which to find the first occurrence
+--
+-- Returns: The first timestamp that satisfies the recurrence rule
+CREATE OR REPLACE FUNCTION _rrule.first("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
 BEGIN
   RETURN (SELECT "ts"
@@ -704,11 +791,24 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns the first occurrence of a recurrence rule (parsed from text).
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp
+--
+-- Returns: The first timestamp that satisfies the recurrence rule
 CREATE OR REPLACE FUNCTION _rrule.first("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT _rrule.first(_rrule.rrule("rrule"), "dtstart");
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns the first occurrence of a ruleset.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--
+-- Returns: The earliest timestamp from the ruleset (including RDATE, excluding EXDATE)
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
@@ -716,6 +816,12 @@ RETURNS TIMESTAMP AS $$
   ORDER BY occurrence ASC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns the first occurrence from multiple rulesets.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--
+-- Returns: The earliest timestamp across all rulesets
 CREATE OR REPLACE FUNCTION _rrule.first("rruleset_array" _rrule.RRULESET[])
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
@@ -724,6 +830,13 @@ RETURNS TIMESTAMP AS $$
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
+-- Returns the last occurrence of a recurrence rule. Requires the rule to be finite (COUNT or UNTIL).
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp
+--
+-- Returns: The last timestamp that satisfies the recurrence rule, or NULL if infinite
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" _rrule.RRULE, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
@@ -731,11 +844,24 @@ RETURNS TIMESTAMP AS $$
   ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns the last occurrence of a recurrence rule (parsed from text).
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp
+--
+-- Returns: The last timestamp that satisfies the recurrence rule, or NULL if infinite
 CREATE OR REPLACE FUNCTION _rrule.last("rrule" TEXT, "dtstart" TIMESTAMP)
 RETURNS TIMESTAMP AS $$
   SELECT _rrule.last(_rrule.rrule("rrule"), "dtstart");
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns the last occurrence of a ruleset. Requires the ruleset to be finite.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--
+-- Returns: The latest timestamp from the ruleset, or NULL if infinite
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset" _rrule.RRULESET)
 RETURNS TIMESTAMP AS $$
   SELECT occurrence
@@ -743,8 +869,12 @@ RETURNS TIMESTAMP AS $$
   ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns the last occurrence from an array of rulesets.
--- Returns NULL if the ruleset array contains infinite recurrence rules.
+-- Returns the last occurrence from multiple rulesets.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--
+-- Returns: The latest timestamp across all rulesets, or NULL if any ruleset is infinite
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset_array" _rrule.RRULESET[])
 RETURNS SETOF TIMESTAMP AS $$
 BEGIN
@@ -758,7 +888,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
-
+-- Returns all occurrences that occur before a given timestamp.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp from which to generate occurrences
+--   when    - The cutoff timestamp (occurrences must be before or equal to this)
+--
+-- Returns: Set of timestamps that occur before or at the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.before(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP,
@@ -769,18 +906,39 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rrule", "dtstart", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns all occurrences (parsed from text) that occur before a given timestamp.
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp
+--   when    - The cutoff timestamp
+--
+-- Returns: Set of timestamps that occur before or at the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.before("rrule" TEXT, "dtstart" TIMESTAMP, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.before(_rrule.rrule("rrule"), "dtstart", "when");
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns all occurrences from a ruleset that occur before a given timestamp.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--   when     - The cutoff timestamp
+--
+-- Returns: Set of timestamps that occur before or at the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns all occurrences from an array of rulesets that occur before a given timestamp.
+-- Returns all occurrences from multiple rulesets that occur before a given timestamp.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--   when           - The cutoff timestamp
+--
+-- Returns: Combined set of timestamps from all rulesets that occur before or at "when"
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
@@ -789,6 +947,14 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
 
 
+-- Returns all occurrences that occur after a given timestamp.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp from which to generate occurrences
+--   when    - The cutoff timestamp (occurrences must be after this)
+--
+-- Returns: Set of timestamps that occur after the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.after(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP,
@@ -799,6 +965,14 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rrule", "dtstart", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns all occurrences (parsed from text) that occur after a given timestamp.
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp
+--   when    - The cutoff timestamp
+--
+-- Returns: Set of timestamps that occur after the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.after(
   "rrule" TEXT,
   "dtstart" TIMESTAMP,
@@ -808,19 +982,39 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.after(_rrule.rrule("rrule"), "dtstart", "when");
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns all occurrences from a ruleset that occur after a given timestamp.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--   when     - The cutoff timestamp
+--
+-- Returns: Set of timestamps that occur after the "when" timestamp
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset" _rrule.RRULESET, "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns all occurrences from an array of rulesets that occur after a given timestamp.
+-- Returns all occurrences from multiple rulesets that occur after a given timestamp.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--   when           - The cutoff timestamp
+--
+-- Returns: Combined set of timestamps from all rulesets that occur after "when"
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *
   FROM _rrule.occurrences("rruleset_array", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Returns true if the given timestamp occurs within the ruleset. Matches by date only, ignoring time.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--   timestamp - The timestamp to check (only the date portion is compared)
+--
+-- Returns: True if the date of the timestamp matches any occurrence date in the ruleset
 CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
 DECLARE
@@ -836,6 +1030,13 @@ BEGIN
   RETURN inSet;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+-- Converts a JSONB object to an RRULE type. Validates according to RFC 5545.
+--
+-- Parameters:
+--   input - JSONB object with RRULE fields (freq, interval, count, until, by* arrays, wkst)
+--           Example: '{"freq": "DAILY", "count": 10, "interval": 1}'
+--
+-- Returns: RRULE type with defaults applied (interval=1, wkst='MO')
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rrule("input" jsonb)
 RETURNS _rrule.RRULE AS $$
 DECLARE
@@ -885,6 +1086,13 @@ BEGIN
   RETURN result;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+-- Converts a JSONB object to an RRULESET type. Validates DTSTART and DTEND.
+--
+-- Parameters:
+--   input - JSONB object with rruleset fields (dtstart, dtend, rrule, exrule, rdate, exdate)
+--           Example: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--
+-- Returns: RRULESET type with validated timestamps and rules
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE

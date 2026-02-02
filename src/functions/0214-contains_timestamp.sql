@@ -1,3 +1,10 @@
+-- Returns true if the given timestamp occurs within the ruleset. Matches by date only, ignoring time.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, RDATE, EXDATE
+--   timestamp - The timestamp to check (only the date portion is compared)
+--
+-- Returns: True if the date of the timestamp matches any occurrence date in the ruleset
 CREATE OR REPLACE FUNCTION _rrule.contains_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
 DECLARE

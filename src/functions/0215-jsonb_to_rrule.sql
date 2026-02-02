@@ -1,3 +1,10 @@
+-- Converts a JSONB object to an RRULE type. Validates according to RFC 5545.
+--
+-- Parameters:
+--   input - JSONB object with RRULE fields (freq, interval, count, until, by* arrays, wkst)
+--           Example: '{"freq": "DAILY", "count": 10, "interval": 1}'
+--
+-- Returns: RRULE type with defaults applied (interval=1, wkst='MO')
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rrule("input" jsonb)
 RETURNS _rrule.RRULE AS $$
 DECLARE

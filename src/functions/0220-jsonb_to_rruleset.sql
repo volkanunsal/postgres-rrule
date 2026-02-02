@@ -1,3 +1,10 @@
+-- Converts a JSONB object to an RRULESET type. Validates DTSTART and DTEND.
+--
+-- Parameters:
+--   input - JSONB object with rruleset fields (dtstart, dtend, rrule, exrule, rdate, exdate)
+--           Example: '{"dtstart": "2026-01-01T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'
+--
+-- Returns: RRULESET type with validated timestamps and rules
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset("input" jsonb)
 RETURNS _rrule.RRULESET AS $$
 DECLARE

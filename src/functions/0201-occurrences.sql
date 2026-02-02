@@ -1,4 +1,10 @@
-
+-- Generates all occurrences for a recurrence rule.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern (frequency, interval, BY* constraints)
+--   dtstart - The starting timestamp from which to generate occurrences
+--
+-- Returns: Set of timestamps representing each occurrence
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rrule" _rrule.RRULE,
   "dtstart" TIMESTAMP
@@ -39,6 +45,14 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a recurrence rule within a specific time range.
+--
+-- Parameters:
+--   rrule   - The recurrence rule defining the pattern
+--   dtstart - The starting timestamp from which to generate occurrences
+--   between - Time range (tsrange) to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
+--
+-- Returns: Set of timestamps within the specified range
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" _rrule.RRULE, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -46,6 +60,14 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "occurrence" <@ "between";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a recurrence rule (parsed from text) within a time range.
+--
+-- Parameters:
+--   rrule   - RRULE string (e.g., "RRULE:FREQ=DAILY;COUNT=10")
+--   dtstart - The starting timestamp from which to generate occurrences
+--   between - Time range (tsrange) to filter occurrences
+--
+-- Returns: Set of timestamps within the specified range
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rrule" TEXT, "dtstart" TIMESTAMP, "between" TSRANGE)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT "occurrence"
@@ -53,6 +75,13 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "occurrence" <@ "between";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates occurrences for a ruleset within a time range, including RDATE and excluding EXDATE.
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--   tsrange  - Time range to filter occurrences (e.g., '[2026-01-01, 2026-02-01)')
+--
+-- Returns: Set of timestamps within the range, with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset" _rrule.RRULESET,
   "tsrange" TSRANGE
@@ -88,12 +117,24 @@ RETURNS SETOF TIMESTAMP AS $$
   ORDER BY "occurrence";
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
+-- Generates all occurrences for a ruleset (unbounded time range).
+--
+-- Parameters:
+--   rruleset - The ruleset containing RRULE, DTSTART, DTEND, RDATE, EXDATE, EXRULE
+--
+-- Returns: Set of all timestamps with RDATE included and EXDATE/EXRULE excluded
 CREATE OR REPLACE FUNCTION _rrule.occurrences("rruleset" _rrule.RRULESET)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns all occurrences from an array of rulesets within a given time range.
+-- Generates all occurrences from multiple rulesets within a time range.
+--
+-- Parameters:
+--   rruleset_array - Array of rulesets to combine
+--   tsrange        - Time range to filter occurrences
+--
+-- Returns: Combined set of timestamps from all rulesets, sorted chronologically
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset_array" _rrule.RRULESET[],
   "tsrange" TSRANGE
