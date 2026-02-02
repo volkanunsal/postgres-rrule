@@ -186,4 +186,8 @@ When adding new functions, use appropriate numbering (0001-0270) to maintain dep
 
 The documentation for the project is maintained in the `docs/` directory. All documentation files are written in Markdown format. All generated documentation files should be placed in this directory.
 
+## TDD (Test Driven Development)
+
+When adding new features to the project, please ensure that you write the unit tests for the new features and place them in the `tests/` directory and ensure they fail BEFORE writing the implementation code.
+
 <!-- USER_MODIFICATIONS -->

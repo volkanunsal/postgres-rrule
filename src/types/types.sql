@@ -26,7 +26,7 @@ CREATE TABLE _rrule.RRULE (
   "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),  -- 0-59 (60 for leap second)
   "byminute" INTEGER[] CHECK (0 <= ALL("byminute") AND 60 > ALL("byminute")),  -- 0-59
   "byhour" INTEGER[] CHECK (0 <= ALL("byhour") AND 24 > ALL("byhour")),        -- 0-23
-  "byday" _rrule.DAY[],  -- MO, TU, WE, TH, FR, SA, SU (optionally prefixed with ordinal)
+  "byday" TEXT[],  -- MO, TU, WE, TH, FR, SA, SU (optionally prefixed with ordinal like 1MO, -1FR)
 
   -- Date component constraints (RFC 5545 section 3.3.10)
   "bymonthday" INTEGER[] CHECK (31 >= ALL("bymonthday") AND 0 <> ALL("bymonthday") AND -31 <= ALL("bymonthday")),  -- 1-31 or -31 to -1 (negative counts from end)

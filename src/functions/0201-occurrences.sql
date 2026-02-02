@@ -10,16 +10,35 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "dtstart" TIMESTAMP
 )
 RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  has_ordinal BOOLEAN;
+BEGIN
+  -- Check if this is MONTHLY with ordinal BYDAY (e.g., 1TU, -1FR)
+  IF "rrule"."freq" = 'MONTHLY' AND "rrule"."byday" IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM unnest("rrule"."byday") byday_val
+      WHERE _rrule.extract_byday_ordinal(byday_val) IS NOT NULL
+    ) INTO has_ordinal;
+
+    IF has_ordinal THEN
+      -- Use specialized generator for ordinal BYDAY
+      RETURN QUERY SELECT _rrule.occurrences_monthly_byday("rrule", "dtstart");
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Standard occurrence generation for all other cases
+  RETURN QUERY
   WITH "starts" AS (
     SELECT "start"
-    FROM _rrule.all_starts($1, $2) "start"
+    FROM _rrule.all_starts("rrule", "dtstart") "start"
   ),
   "params" AS (
     SELECT
       "until",
       "interval"
-    FROM _rrule.until($1, $2) "until"
-    FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
+    FROM _rrule.until("rrule", "dtstart") "until"
+    FULL OUTER JOIN _rrule.build_interval("rrule") "interval" ON (true)
   ),
   "generated" AS (
     SELECT generate_series("start", "until", "interval") "occurrence"
@@ -43,7 +62,8 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "row_number" <= "rrule"."count"
   OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Generates occurrences for a recurrence rule within a specific time range.
 --

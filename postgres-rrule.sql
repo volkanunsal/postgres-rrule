@@ -56,7 +56,7 @@ CREATE TABLE _rrule.RRULE (
   "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),  -- 0-59 (60 for leap second)
   "byminute" INTEGER[] CHECK (0 <= ALL("byminute") AND 60 > ALL("byminute")),  -- 0-59
   "byhour" INTEGER[] CHECK (0 <= ALL("byhour") AND 24 > ALL("byhour")),        -- 0-23
-  "byday" _rrule.DAY[],  -- MO, TU, WE, TH, FR, SA, SU (optionally prefixed with ordinal)
+  "byday" TEXT[],  -- MO, TU, WE, TH, FR, SA, SU (optionally prefixed with ordinal like 1MO, -1FR)
 
   -- Date component constraints (RFC 5545 section 3.3.10)
   "bymonthday" INTEGER[] CHECK (31 >= ALL("bymonthday") AND 0 <> ALL("bymonthday") AND -31 <= ALL("bymonthday")),  -- 1-31 or -31 to -1 (negative counts from end)
@@ -209,10 +209,24 @@ COMMENT ON FUNCTION _rrule.integer_array (text) IS 'Coerce a text string into an
 
 
 CREATE OR REPLACE FUNCTION _rrule.day_array (TEXT)
-RETURNS _rrule.DAY[] AS $$
-  SELECT ('{' || $1 || '}')::_rrule.DAY[];
-$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
-COMMENT ON FUNCTION _rrule.day_array (text) IS 'Coerce a text string into an array of "rrule"."day"';
+RETURNS TEXT[] AS $$
+DECLARE
+  result TEXT[];
+  day_value TEXT;
+BEGIN
+  -- Split by comma and validate each day value
+  FOREACH day_value IN ARRAY string_to_array($1, ',')
+  LOOP
+    -- Validate format: optional +/- and digits, followed by exactly 2 uppercase letters
+    IF day_value !~ '^[+-]?\d*[A-Z]{2}$' THEN
+      RAISE EXCEPTION 'Invalid BYDAY value: "%". Expected format: [+/-][ordinal]DAY (e.g., MO, 1TU, -1FR)', day_value;
+    END IF;
+    result := array_append(result, day_value);
+  END LOOP;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+COMMENT ON FUNCTION _rrule.day_array (text) IS 'Parse BYDAY values with optional ordinal prefixes (e.g., MO, 1TU, 2MO, -1FR) into TEXT array';
 
 
 
@@ -225,6 +239,183 @@ $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.explode(_rrule.RRULE)
 RETURNS SETOF _rrule.RRULE AS 'SELECT $1' LANGUAGE SQL IMMUTABLE STRICT;
 COMMENT ON FUNCTION _rrule.explode (_rrule.RRULE) IS 'Helper function to allow SELECT * FROM explode(rrule)';
+-- Helper function to extract the ordinal from a BYDAY value
+-- Examples: "1TU" → 1, "2MO" → 2, "-1FR" → -1, "MO" → NULL
+CREATE OR REPLACE FUNCTION _rrule.extract_byday_ordinal(byday_value TEXT)
+RETURNS INTEGER AS $$
+  SELECT CASE
+    WHEN byday_value ~ '^[+-]?\d+[A-Z]{2}$' THEN
+      substring(byday_value from '^([+-]?\d+)[A-Z]{2}$')::INTEGER
+    ELSE NULL
+  END;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+
+
+-- Helper function to extract the day from a BYDAY value
+-- Examples: "1TU" → "TU", "2MO" → "MO", "-1FR" → "FR", "MO" → "MO"
+CREATE OR REPLACE FUNCTION _rrule.extract_byday_day(byday_value TEXT)
+RETURNS _rrule.DAY AS $$
+  SELECT substring(byday_value from '([A-Z]{2})$')::_rrule.DAY;
+$$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+
+
+-- Helper function to check if a timestamp matches an ordinal BYDAY value within a month
+-- For example, is '2026-02-03' the 1st Tuesday of February 2026?
+CREATE OR REPLACE FUNCTION _rrule.matches_ordinal_byday_in_month(
+  ts TIMESTAMP,
+  byday_value TEXT
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  ordinal INTEGER;
+  day_of_week _rrule.DAY;
+  month_start TIMESTAMP;
+  month_end TIMESTAMP;
+  occurrence_count INTEGER;
+  occurrence_position INTEGER;
+BEGIN
+  -- Extract ordinal and day from byday_value
+  ordinal := _rrule.extract_byday_ordinal(byday_value);
+  day_of_week := _rrule.extract_byday_day(byday_value);
+
+  -- If no ordinal, just check if the day matches
+  IF ordinal IS NULL THEN
+    RETURN ts::_rrule.DAY = day_of_week;
+  END IF;
+
+  -- Check if timestamp is on the correct day of week
+  IF ts::_rrule.DAY != day_of_week THEN
+    RETURN false;
+  END IF;
+
+  -- Get month boundaries
+  month_start := date_trunc('month', ts);
+  month_end := month_start + INTERVAL '1 month' - INTERVAL '1 second';
+
+  -- Count total occurrences of this day in the month
+  SELECT count(*)::INTEGER INTO occurrence_count
+  FROM generate_series(month_start, month_end, INTERVAL '1 day') d
+  WHERE d::_rrule.DAY = day_of_week;
+
+  -- Find position of current timestamp
+  SELECT count(*)::INTEGER INTO occurrence_position
+  FROM generate_series(month_start, ts, INTERVAL '1 day') d
+  WHERE d::_rrule.DAY = day_of_week;
+
+  -- Check if position matches ordinal
+  IF ordinal > 0 THEN
+    RETURN occurrence_position = ordinal;
+  ELSE
+    -- Negative ordinal counts from end
+    RETURN occurrence_position = (occurrence_count + ordinal + 1);
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+
+
+-- Helper function to check if a timestamp matches an ordinal BYDAY value within a year
+-- Used for YEARLY frequency rules
+CREATE OR REPLACE FUNCTION _rrule.matches_ordinal_byday_in_year(
+  ts TIMESTAMP,
+  byday_value TEXT
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+  ordinal INTEGER;
+  day_of_week _rrule.DAY;
+  year_start TIMESTAMP;
+  year_end TIMESTAMP;
+  occurrence_count INTEGER;
+  occurrence_position INTEGER;
+BEGIN
+  -- Extract ordinal and day from byday_value
+  ordinal := _rrule.extract_byday_ordinal(byday_value);
+  day_of_week := _rrule.extract_byday_day(byday_value);
+
+  -- If no ordinal, just check if the day matches
+  IF ordinal IS NULL THEN
+    RETURN ts::_rrule.DAY = day_of_week;
+  END IF;
+
+  -- Check if timestamp is on the correct day of week
+  IF ts::_rrule.DAY != day_of_week THEN
+    RETURN false;
+  END IF;
+
+  -- Get year boundaries
+  year_start := date_trunc('year', ts);
+  year_end := year_start + INTERVAL '1 year' - INTERVAL '1 second';
+
+  -- Count total occurrences of this day in the year
+  SELECT count(*)::INTEGER INTO occurrence_count
+  FROM generate_series(year_start, year_end, INTERVAL '1 day') d
+  WHERE d::_rrule.DAY = day_of_week;
+
+  -- Find position of current timestamp
+  SELECT count(*)::INTEGER INTO occurrence_position
+  FROM generate_series(year_start, ts, INTERVAL '1 day') d
+  WHERE d::_rrule.DAY = day_of_week;
+
+  -- Check if position matches ordinal
+  IF ordinal > 0 THEN
+    RETURN occurrence_position = ordinal;
+  ELSE
+    -- Negative ordinal counts from end
+    RETURN occurrence_position = (occurrence_count + ordinal + 1);
+  END IF;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
+
+
+-- Helper function to generate all timestamps matching an ordinal BYDAY within a month
+-- For example, all 1st Tuesdays: returns the 1st Tuesday of the given month
+CREATE OR REPLACE FUNCTION _rrule.ordinal_byday_in_month(
+  month_start TIMESTAMP,
+  byday_value TEXT
+)
+RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  ordinal INTEGER;
+  day_of_week _rrule.DAY;
+  month_end TIMESTAMP;
+  all_occurrences TIMESTAMP[];
+  target_index INTEGER;
+BEGIN
+  -- Extract ordinal and day from byday_value
+  ordinal := _rrule.extract_byday_ordinal(byday_value);
+  day_of_week := _rrule.extract_byday_day(byday_value);
+
+  month_end := month_start + INTERVAL '1 month' - INTERVAL '1 second';
+
+  -- If no ordinal, return all occurrences of that weekday in the month
+  IF ordinal IS NULL THEN
+    RETURN QUERY
+    SELECT d
+    FROM generate_series(month_start, month_end, INTERVAL '1 day') d
+    WHERE d::_rrule.DAY = day_of_week;
+    RETURN;
+  END IF;
+
+  -- Collect all occurrences of this day in the month
+  SELECT array_agg(d ORDER BY d) INTO all_occurrences
+  FROM generate_series(month_start, month_end, INTERVAL '1 day') d
+  WHERE d::_rrule.DAY = day_of_week;
+
+  -- Calculate target index (1-based)
+  IF ordinal > 0 THEN
+    target_index := ordinal;
+  ELSE
+    target_index := array_length(all_occurrences, 1) + ordinal + 1;
+  END IF;
+
+  -- Return the nth occurrence if it exists
+  IF target_index >= 1 AND target_index <= array_length(all_occurrences, 1) THEN
+    RETURN NEXT all_occurrences[target_index];
+  END IF;
+
+  RETURN;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.compare_equal(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
   SELECT count(*) = 1 FROM (
@@ -240,6 +431,80 @@ RETURNS BOOLEAN AS $$
     SELECT * FROM _rrule.explode($1) UNION SELECT * FROM _rrule.explode($2)
   ) AS x;
 $$ LANGUAGE SQL IMMUTABLE STRICT PARALLEL SAFE;
+-- Specialized occurrence generator for MONTHLY frequency with ordinal BYDAY
+-- This function generates occurrences by finding the nth weekday of each month,
+-- rather than adding fixed intervals (which doesn't work for ordinal BYDAY)
+CREATE OR REPLACE FUNCTION _rrule.occurrences_monthly_byday(
+  "rrule" _rrule.RRULE,
+  "dtstart" TIMESTAMP
+)
+RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  current_month TIMESTAMP;
+  end_date TIMESTAMP;
+  month_count INTEGER := 0;
+  occurrence_count INTEGER := 0;
+  max_occurrences INTEGER;
+  byday_val TEXT;
+  occurrence TIMESTAMP;
+BEGIN
+  -- Calculate end date
+  IF "rrule"."until" IS NOT NULL THEN
+    end_date := "rrule"."until";
+  ELSIF "rrule"."count" IS NOT NULL THEN
+    -- For COUNT, we need to generate enough months to get COUNT occurrences
+    -- Estimate: COUNT * interval months should be sufficient
+    end_date := "dtstart" + (_rrule.build_interval("rrule"."interval", "rrule"."freq") * "rrule"."count" * 2);
+    max_occurrences := "rrule"."count";
+  ELSE
+    -- Infinite recurrence
+    end_date := '9999-12-31 23:59:59'::TIMESTAMP;
+  END IF;
+
+  -- Start at the beginning of dtstart's month
+  current_month := date_trunc('month', "dtstart");
+
+  -- Iterate through months
+  WHILE current_month <= end_date LOOP
+    -- For each BYDAY value, generate occurrences in this month
+    FOREACH byday_val IN ARRAY "rrule"."byday"
+    LOOP
+      -- Generate occurrence for this byday value in this month
+      FOR occurrence IN
+        SELECT _rrule.ordinal_byday_in_month(current_month, byday_val)
+      LOOP
+        -- Apply time component from dtstart
+        occurrence := occurrence
+          + (EXTRACT(HOUR FROM "dtstart") || ' hours')::INTERVAL
+          + (EXTRACT(MINUTE FROM "dtstart") || ' minutes')::INTERVAL
+          + (EXTRACT(SECOND FROM "dtstart") || ' seconds')::INTERVAL;
+
+        -- Only include occurrences >= dtstart
+        IF occurrence >= "dtstart" THEN
+          -- Check against UNTIL
+          IF "rrule"."until" IS NOT NULL AND occurrence > "rrule"."until" THEN
+            RETURN;
+          END IF;
+
+          RETURN NEXT occurrence;
+          occurrence_count := occurrence_count + 1;
+
+          -- Check against COUNT
+          IF max_occurrences IS NOT NULL AND occurrence_count >= max_occurrences THEN
+            RETURN;
+          END IF;
+        END IF;
+      END LOOP;
+    END LOOP;
+
+    -- Move to next month (apply interval)
+    month_count := month_count + 1;
+    current_month := date_trunc('month', "dtstart") + (_rrule.build_interval("rrule"."interval", 'MONTHLY') * month_count);
+  END LOOP;
+
+  RETURN;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE;
 CREATE OR REPLACE FUNCTION _rrule.build_interval("interval" INTEGER, "freq" _rrule.FREQ)
 RETURNS INTERVAL AS $$
 DECLARE
@@ -358,11 +623,35 @@ BEGIN
     SELECT DISTINCT "ts"
     FROM timestamp_combinations
     UNION
+    -- For WEEKLY/DAILY with BYDAY (no ordinals meaningful here)
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", dtstart + INTERVAL '6 days', INTERVAL '1 day') "ts"
+      CROSS JOIN unnest("rrule"."byday") as byday_val
       WHERE "rrule"."byday" IS NOT NULL
-        AND "ts"::_rrule.DAY = ANY("rrule"."byday")
+        AND "rrule"."freq" IN ('DAILY', 'WEEKLY')
+        AND "ts"::_rrule.DAY = _rrule.extract_byday_day(byday_val)
+    ) as "ts"
+    UNION
+    -- For MONTHLY with BYDAY (supports ordinals)
+    SELECT "ts" FROM (
+      SELECT _rrule.ordinal_byday_in_month(
+        date_trunc('month', "dtstart"),
+        byday_val
+      ) as "ts"
+      FROM unnest("rrule"."byday") as byday_val
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "rrule"."freq" = 'MONTHLY'
+    ) as "ts"
+    UNION
+    -- For YEARLY with BYDAY (supports ordinals, generates across year)
+    SELECT "ts" FROM (
+      SELECT "ts"
+      FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 day') "ts"
+      CROSS JOIN unnest("rrule"."byday") as byday_val
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "rrule"."freq" = 'YEARLY'
+        AND "ts"::_rrule.DAY = _rrule.extract_byday_day(byday_val)
     ) as "ts"
     UNION
     SELECT "ts" FROM (
@@ -383,7 +672,31 @@ BEGIN
   SELECT DISTINCT "ts"
   FROM candidate_timestamps
   WHERE (
-    "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
+    "rrule"."byday" IS NULL
+    OR (
+      -- For MONTHLY, check ordinal match within month
+      "rrule"."freq" = 'MONTHLY'
+      AND EXISTS (
+        SELECT 1 FROM unnest("rrule"."byday") byday_val
+        WHERE _rrule.matches_ordinal_byday_in_month("ts", byday_val)
+      )
+    )
+    OR (
+      -- For YEARLY, check ordinal match within year
+      "rrule"."freq" = 'YEARLY'
+      AND EXISTS (
+        SELECT 1 FROM unnest("rrule"."byday") byday_val
+        WHERE _rrule.matches_ordinal_byday_in_year("ts", byday_val)
+      )
+    )
+    OR (
+      -- For WEEKLY/DAILY, just match the day (ordinals not meaningful)
+      "rrule"."freq" IN ('WEEKLY', 'DAILY')
+      AND "ts"::_rrule.DAY = ANY(
+        SELECT _rrule.extract_byday_day(byday_val)
+        FROM unnest("rrule"."byday") byday_val
+      )
+    )
   )
   AND (
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
@@ -721,16 +1034,35 @@ CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "dtstart" TIMESTAMP
 )
 RETURNS SETOF TIMESTAMP AS $$
+DECLARE
+  has_ordinal BOOLEAN;
+BEGIN
+  -- Check if this is MONTHLY with ordinal BYDAY (e.g., 1TU, -1FR)
+  IF "rrule"."freq" = 'MONTHLY' AND "rrule"."byday" IS NOT NULL THEN
+    SELECT EXISTS (
+      SELECT 1 FROM unnest("rrule"."byday") byday_val
+      WHERE _rrule.extract_byday_ordinal(byday_val) IS NOT NULL
+    ) INTO has_ordinal;
+
+    IF has_ordinal THEN
+      -- Use specialized generator for ordinal BYDAY
+      RETURN QUERY SELECT _rrule.occurrences_monthly_byday("rrule", "dtstart");
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Standard occurrence generation for all other cases
+  RETURN QUERY
   WITH "starts" AS (
     SELECT "start"
-    FROM _rrule.all_starts($1, $2) "start"
+    FROM _rrule.all_starts("rrule", "dtstart") "start"
   ),
   "params" AS (
     SELECT
       "until",
       "interval"
-    FROM _rrule.until($1, $2) "until"
-    FULL OUTER JOIN _rrule.build_interval($1) "interval" ON (true)
+    FROM _rrule.until("rrule", "dtstart") "until"
+    FULL OUTER JOIN _rrule.build_interval("rrule") "interval" ON (true)
   ),
   "generated" AS (
     SELECT generate_series("start", "until", "interval") "occurrence"
@@ -754,7 +1086,8 @@ RETURNS SETOF TIMESTAMP AS $$
   WHERE "row_number" <= "rrule"."count"
   OR "rrule"."count" IS NULL
   ORDER BY "occurrence";
-$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
+END;
+$$ LANGUAGE plpgsql STRICT IMMUTABLE PARALLEL SAFE;
 
 -- Generates occurrences for a recurrence rule within a specific time range.
 --

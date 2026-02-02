@@ -56,11 +56,35 @@ BEGIN
     SELECT DISTINCT "ts"
     FROM timestamp_combinations
     UNION
+    -- For WEEKLY/DAILY with BYDAY (no ordinals meaningful here)
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", dtstart + INTERVAL '6 days', INTERVAL '1 day') "ts"
+      CROSS JOIN unnest("rrule"."byday") as byday_val
       WHERE "rrule"."byday" IS NOT NULL
-        AND "ts"::_rrule.DAY = ANY("rrule"."byday")
+        AND "rrule"."freq" IN ('DAILY', 'WEEKLY')
+        AND "ts"::_rrule.DAY = _rrule.extract_byday_day(byday_val)
+    ) as "ts"
+    UNION
+    -- For MONTHLY with BYDAY (supports ordinals)
+    SELECT "ts" FROM (
+      SELECT _rrule.ordinal_byday_in_month(
+        date_trunc('month', "dtstart"),
+        byday_val
+      ) as "ts"
+      FROM unnest("rrule"."byday") as byday_val
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "rrule"."freq" = 'MONTHLY'
+    ) as "ts"
+    UNION
+    -- For YEARLY with BYDAY (supports ordinals, generates across year)
+    SELECT "ts" FROM (
+      SELECT "ts"
+      FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 day') "ts"
+      CROSS JOIN unnest("rrule"."byday") as byday_val
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "rrule"."freq" = 'YEARLY'
+        AND "ts"::_rrule.DAY = _rrule.extract_byday_day(byday_val)
     ) as "ts"
     UNION
     SELECT "ts" FROM (
@@ -81,7 +105,31 @@ BEGIN
   SELECT DISTINCT "ts"
   FROM candidate_timestamps
   WHERE (
-    "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
+    "rrule"."byday" IS NULL
+    OR (
+      -- For MONTHLY, check ordinal match within month
+      "rrule"."freq" = 'MONTHLY'
+      AND EXISTS (
+        SELECT 1 FROM unnest("rrule"."byday") byday_val
+        WHERE _rrule.matches_ordinal_byday_in_month("ts", byday_val)
+      )
+    )
+    OR (
+      -- For YEARLY, check ordinal match within year
+      "rrule"."freq" = 'YEARLY'
+      AND EXISTS (
+        SELECT 1 FROM unnest("rrule"."byday") byday_val
+        WHERE _rrule.matches_ordinal_byday_in_year("ts", byday_val)
+      )
+    )
+    OR (
+      -- For WEEKLY/DAILY, just match the day (ordinals not meaningful)
+      "rrule"."freq" IN ('WEEKLY', 'DAILY')
+      AND "ts"::_rrule.DAY = ANY(
+        SELECT _rrule.extract_byday_day(byday_val)
+        FROM unnest("rrule"."byday") byday_val
+      )
+    )
   )
   AND (
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")

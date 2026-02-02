@@ -241,5 +241,6 @@ ci-test:
 		tests/test_jsonb_conversion.sql \
 		tests/test_last.sql \
 		tests/test_occurrences.sql \
+		tests/test_ordinal_byday.sql \
 		tests/test_parser.sql \
 		tests/test_validation.sql
