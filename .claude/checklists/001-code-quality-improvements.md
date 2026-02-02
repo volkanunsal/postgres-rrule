@@ -48,85 +48,73 @@ This checklist identifies low-hanging fruit for improving code craftsmanship in 
 
 ### Performance Optimizations
 
-- [ ] **Replace FOREACH loops with set-based operations** - Lines 463-469, 890-898, 821-826
-  - Current: Iterative FOREACH loops for array operations
-  - Issue: Row-by-row processing is slower than set operations
-  - Recommendation: Use `unnest()` with aggregation functions
-  - Example:
-    ```sql
-    -- Instead of FOREACH loop in is_finite()
-    SELECT bool_or(_rrule.is_finite(item))
-    FROM unnest("rruleset_array") AS item;
-    ```
-  - Impact: Medium effort, significant performance improvement for large arrays
-  - Locations:
-    - Lines 458-470: `is_finite()` for rruleset arrays
-    - Lines 821-827: `jsonb_to_rruleset_array()`
-    - Lines 878-883: `rruleset_array_to_jsonb()`
-    - Lines 887-898: `rruleset_array_contains_timestamp()`
+- [x] **Replace FOREACH loops with set-based operations** - Lines 463-469, 890-898, 821-826 ✅ **COMPLETED**
+  - Solution implemented: Replaced all 6 FOREACH/FOR loops with set-based operations
+  - Changed from plpgsql to SQL language for better performance
+  - Functions optimized:
+    - ✅ 0200-is_finite.sql: Used `bool_or()` with `unnest()`
+    - ✅ 0221-jsonb_to_rruleset_array.sql: Used `array_agg()` instead of loop concatenation
+    - ✅ 0240-rruleset_array_to_jsonb.sql: Used `jsonb_agg()` instead of loop concatenation
+    - ✅ 0250-rruleset_array_contains_timestamp.sql: Used `bool_or()` with `unnest()`
+    - ✅ 0260-rruleset_array_has_after_timestamp.sql: Used `EXISTS` with subquery
+    - ✅ 0270-rruleset_array_has_before_timestamp.sql: Used `EXISTS` with subquery
+  - Impact: Significant performance improvement for large arrays, all tests passing
 
-- [ ] **Optimize array concatenation in loops** - Lines 823, 879
-  - Current: `out := (SELECT out || item)` in loops
-  - Issue: Array concatenation in loops creates many intermediate arrays
-  - Recommendation: Use `array_agg()` with set operations
-  - Impact: Medium effort, improves performance for large arrays
+- [x] **Optimize array concatenation in loops** - Lines 823, 879 ✅ **COMPLETED**
+  - Solution implemented: Replaced array concatenation with `array_agg()` and `jsonb_agg()`
+  - Combined with FOREACH loop optimization above
+  - Impact: Eliminated O(n²) array copying, improved performance for large arrays
 
-- [ ] **Add indexes for table-based types** - Lines 26-43
-  - Current: No indexes defined on RRULE or RRULESET tables
-  - Issue: Could slow down queries on these composite types
-  - Recommendation: Consider indexes on frequently queried fields (freq, dtstart)
-  - Impact: Low effort, potential query performance improvement
-  - Note: May not be applicable for table-based types; evaluate if needed
+- [ ] **Add indexes for table-based types** - Lines 26-43 ⏭️ **SKIPPED**
+  - Note: Not applicable for table-based composite types
+  - Decision: Skip per project requirements
 
-- [ ] **Optimize `generate_series` usage** - Lines 270-291
-  - Current: Multiple `generate_series` calls with UNION
-  - Issue: Each generate_series scans a date range independently
-  - Recommendation: Combine into single generate_series where possible
-  - Impact: Medium effort, reduces redundant date generation
+- [x] **Optimize `generate_series` usage** - Lines 270-291 ✅ **COMPLETED**
+  - Solution implemented: Added NULL checks to short-circuit unnecessary series generation
+  - Changes in 0017-all_starts.sql:
+    - ✅ Skip 6-day series if `byday` IS NULL
+    - ✅ Skip 2-month series if `bymonthday` IS NULL
+    - ✅ Skip 1-year series if `bymonth` IS NULL
+  - Impact: Prevents generating unnecessary date ranges, improving performance when BY* parameters aren't used
 
-- [ ] **Cache interval calculations** - Lines 200, 243
-  - Current: `build_interval()` called multiple times for same rrule
-  - Issue: Recalculating same interval repeatedly
-  - Recommendation: Calculate once and reuse in CTEs
-  - Impact: Low effort, small performance improvement
+- [x] **Cache interval calculations** - Lines 200, 243 ✅ **COMPLETED**
+  - Solution implemented: Added CTE in containment function to cache interval calculations
+  - Changes:
+    - ✅ 0015-containment.sql: Added CTE to calculate both intervals once
+    - ✅ 0017-all_starts.sql: Already optimized (stores in variable)
+    - ✅ 0201-occurrences.sql: Already optimized (uses CTE)
+  - Impact: Explicit caching makes intent clear, prevents potential recalculation
 
 ### Code Quality & Maintainability
 
-- [ ] **Extract complex validation logic** - Lines 331-332
-  - Current: Single-line validation with 9 NULL checks
-  - Issue: Hard to read and maintain
-  - Recommendation: Extract to helper function or split into multiple conditions
-  - Example:
-    ```sql
-    CREATE FUNCTION _rrule.has_any_by_rule(r _rrule.RRULE) RETURNS BOOLEAN AS $$
-      SELECT (r."bymonth" IS NOT NULL OR r."byweekno" IS NOT NULL OR ...);
-    $$ LANGUAGE SQL IMMUTABLE STRICT;
-    ```
-  - Impact: Medium effort, significantly improves readability
+- [x] **Extract complex validation logic** - Lines 331-332 ✅ **COMPLETED**
+  - Solution implemented: Created helper function `has_any_by_rule()`
+  - Changes:
+    - ✅ 0089-has_any_by_rule.sql: New helper function checks if any BY* parameter is set
+    - ✅ 0090-validate_rrule.sql: Replaced 9-condition check with `NOT _rrule.has_any_by_rule(result)`
+  - Impact: Significantly improved readability and maintainability
 
-- [ ] **Standardize error messages** - Lines 313, 318, 323, etc.
-  - Current: Inconsistent punctuation and formatting in RAISE EXCEPTION
-  - Issue: Some end with period, some don't; inconsistent capitalization
-  - Recommendation: Standardize format (e.g., "Error: Description of problem")
-  - Impact: Low effort, improves user experience
+- [x] **Standardize error messages** - Lines 313, 318, 323, etc. ✅ **COMPLETED**
+  - Already completed in Quick Wins phase
+  - All error messages now use sentence case with periods
+  - Format: "Description of the problem."
 
-- [ ] **Add input validation for public functions** - Throughout
-  - Current: Relies on STRICT and database constraints
-  - Issue: Limited custom error messages for invalid input
-  - Recommendation: Add explicit validation with helpful error messages
-  - Impact: Medium effort, better error messages for users
+- [x] **Add input validation for public functions** - Throughout ✅ **COMPLETED**
+  - Solution implemented: Added comprehensive validation to validate_rrule()
+  - New validations added:
+    - ✅ COUNT must be positive if provided
+    - ✅ All BY* arrays cannot be empty (9 checks added)
+  - Impact: Better error messages prevent invalid configurations earlier
 
-- [ ] **Extract magic strings to constants** - Lines 228, 406-422
-  - Current: Hardcoded strings like 'MO', 'RRULE:', format strings
-  - Issue: Duplicated strings, harder to maintain
-  - Recommendation: Use variables or constants where PostgreSQL supports them
-  - Impact: Low effort, reduces duplication
+- [ ] **Extract magic strings to constants** - Lines 228, 406-422 ⏭️ **DEFERRED**
+  - Decision: Not beneficial for PostgreSQL
+  - Rationale: 'MO' appears 4 times as RFC 5545 default week start; extracting to function would reduce readability
+  - Current usage is clear and maintainable in context
 
-- [ ] **Improve function naming consistency** - Throughout
-  - Current: Mix of verb_noun (contains_timestamp) and noun_verb patterns
-  - Issue: Inconsistent naming makes API harder to learn
-  - Recommendation: Standardize on verb_noun pattern
-  - Impact: Breaking change - document in migration guide if changed
+- [ ] **Improve function naming consistency** - Throughout ⏭️ **DEFERRED**
+  - Decision: Would be a breaking change
+  - Rationale: Current API is stable; renaming would break existing users
+  - Recommendation: Document in migration guide if changed in future major version
 
 ## 📚 Priority: Low
 

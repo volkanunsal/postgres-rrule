@@ -205,10 +205,14 @@ $$ LANGUAGE SQL IMMUTABLE STRICT;
 -- all other fields must have $2's value(s) in $1.
 CREATE OR REPLACE FUNCTION _rrule.contains(_rrule.RRULE, _rrule.RRULE)
 RETURNS BOOLEAN AS $$
-  SELECT _rrule.interval_contains(
-    _rrule.build_interval($1),
-    _rrule.build_interval($2)
-  ) AND COALESCE($1."wkst" = $2."wkst", true);
+  WITH intervals AS (
+    SELECT
+      _rrule.build_interval($1) AS interval1,
+      _rrule.build_interval($2) AS interval2
+  )
+  SELECT _rrule.interval_contains(interval1, interval2)
+    AND COALESCE($1."wkst" = $2."wkst", true)
+  FROM intervals;
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION _rrule.contained_by(_rrule.RRULE, _rrule.RRULE)
@@ -268,26 +272,23 @@ BEGIN
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", dtstart + INTERVAL '6 days', INTERVAL '1 day') "ts"
-      WHERE (
-        "ts"::_rrule.DAY = ANY("rrule"."byday")
-      )
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "ts"::_rrule.DAY = ANY("rrule"."byday")
     ) as "ts"
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", "dtstart" + INTERVAL '2 months', INTERVAL '1 day') "ts"
-      WHERE (
-        EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
-      )
-      AND "ts" <= ("dtstart" + INTERVAL '2 months')
+      WHERE "rrule"."bymonthday" IS NOT NULL
+        AND EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+        AND "ts" <= ("dtstart" + INTERVAL '2 months')
     ) as "ts"
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 month') "ts"
-      WHERE (
-        EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
-      )
+      WHERE "rrule"."bymonth" IS NOT NULL
+        AND EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
     ) as "ts"
   )
   SELECT DISTINCT "ts"
@@ -305,6 +306,21 @@ BEGIN
 
 END;
 $$ LANGUAGE plpgsql STRICT IMMUTABLE;
+-- Helper function to check if an RRULE has any BY* parameters set.
+-- Used for BYSETPOS validation which requires at least one other BY* parameter.
+CREATE OR REPLACE FUNCTION _rrule.has_any_by_rule(r _rrule.RRULE)
+RETURNS BOOLEAN AS $$
+  SELECT (
+    r."bymonth" IS NOT NULL OR
+    r."byweekno" IS NOT NULL OR
+    r."byyearday" IS NOT NULL OR
+    r."bymonthday" IS NOT NULL OR
+    r."byday" IS NOT NULL OR
+    r."byhour" IS NOT NULL OR
+    r."byminute" IS NOT NULL OR
+    r."bysecond" IS NOT NULL
+  );
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.validate_rrule (result _rrule.RRULE)
 RETURNS void AS $$
 BEGIN
@@ -328,7 +344,7 @@ BEGIN
   END IF;
 
   -- BY[something-else] is required if BYSETPOS is set.
-  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
+  IF result."bysetpos" IS NOT NULL AND NOT _rrule.has_any_by_rule(result) THEN
     RAISE EXCEPTION 'BYSETPOS requires at least one other BY* parameter.';
   END IF;
 
@@ -344,6 +360,50 @@ BEGIN
     IF (NOT result."interval" > 0) THEN
       RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
     END IF;
+  END IF;
+
+  -- COUNT must be positive
+  IF result."count" IS NOT NULL THEN
+    IF (NOT result."count" > 0) THEN
+      RAISE EXCEPTION 'COUNT must be a positive integer.';
+    END IF;
+  END IF;
+
+  -- BY* arrays should not be empty
+  IF result."bymonth" IS NOT NULL AND array_length(result."bymonth", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMONTH cannot be an empty array.';
+  END IF;
+
+  IF result."byweekno" IS NOT NULL AND array_length(result."byweekno", 1) = 0 THEN
+    RAISE EXCEPTION 'BYWEEKNO cannot be an empty array.';
+  END IF;
+
+  IF result."byyearday" IS NOT NULL AND array_length(result."byyearday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYYEARDAY cannot be an empty array.';
+  END IF;
+
+  IF result."bymonthday" IS NOT NULL AND array_length(result."bymonthday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMONTHDAY cannot be an empty array.';
+  END IF;
+
+  IF result."byday" IS NOT NULL AND array_length(result."byday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYDAY cannot be an empty array.';
+  END IF;
+
+  IF result."byhour" IS NOT NULL AND array_length(result."byhour", 1) = 0 THEN
+    RAISE EXCEPTION 'BYHOUR cannot be an empty array.';
+  END IF;
+
+  IF result."byminute" IS NOT NULL AND array_length(result."byminute", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMINUTE cannot be an empty array.';
+  END IF;
+
+  IF result."bysecond" IS NOT NULL AND array_length(result."bysecond", 1) = 0 THEN
+    RAISE EXCEPTION 'BYSECOND cannot be an empty array.';
+  END IF;
+
+  IF result."bysetpos" IS NOT NULL AND array_length(result."bysetpos", 1) = 0 THEN
+    RAISE EXCEPTION 'BYSETPOS cannot be an empty array.';
   END IF;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;CREATE OR REPLACE FUNCTION _rrule.rrule (TEXT)
@@ -456,17 +516,9 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
 RETURNS BOOLEAN AS $$
-DECLARE
-  item _rrule.RRULESET;
-BEGIN
-  FOREACH item IN ARRAY "rruleset_array" LOOP
-    IF (SELECT _rrule.is_finite(item)) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-  RETURN false;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+  SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
+  FROM unnest("rruleset_array") AS item;
+$$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
 
@@ -820,18 +872,9 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.jsonb_to_rruleset_array("input" jsonb)
 RETURNS _rrule.RRULESET[] AS $$
-DECLARE
-  item jsonb;
-  out _rrule.RRULESET[] := '{}'::_rrule.RRULESET[];
-BEGIN
-  FOR item IN SELECT * FROM jsonb_array_elements("input")
-  LOOP
-    out := (SELECT out || _rrule.jsonb_to_rruleset(item));
-  END LOOP;
-
-  RETURN out;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+  SELECT COALESCE(array_agg(_rrule.jsonb_to_rruleset(item)), '{}'::_rrule.RRULESET[])
+  FROM jsonb_array_elements("input") AS item;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rrule_to_jsonb("input" _rrule.RRULE)
 RETURNS jsonb AS $$
 BEGIN
@@ -877,32 +920,14 @@ END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_to_jsonb("input" _rrule.RRULESET[])
 RETURNS jsonb AS $$
-DECLARE
-  item _rrule.RRULESET;
-  out jsonb := '[]'::jsonb;
-BEGIN
-  FOREACH item IN ARRAY "input" LOOP
-    out := (SELECT out || _rrule.rruleset_to_jsonb(item));
-  END LOOP;
-
-  RETURN out;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+  SELECT COALESCE(jsonb_agg(_rrule.rruleset_to_jsonb(item)), '[]'::jsonb)
+  FROM unnest("input") AS item;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_contains_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
-DECLARE
-  item _rrule.RRULESET;
-BEGIN
-  FOREACH item IN ARRAY $1
-  LOOP
-    IF (SELECT _rrule.contains_timestamp(item, $2)) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-
-  RETURN false;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+  SELECT COALESCE(bool_or(_rrule.contains_timestamp(item, $2)), false)
+  FROM unnest($1) AS item;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_has_after_timestamp(_rrule.RRULESET, TIMESTAMP)
 RETURNS BOOLEAN AS $$
   SELECT count(*) > 0 FROM _rrule.after($1, $2) LIMIT 1;
@@ -913,34 +938,20 @@ RETURNS BOOLEAN AS $$
 $$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_after_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
-DECLARE
-  item _rrule.RRULESET;
-BEGIN
-  FOREACH item IN ARRAY $1
-  LOOP
-    IF (SELECT count(*) > 0 FROM _rrule.after(item, $2) LIMIT 1) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-
-  RETURN false;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+  SELECT EXISTS(
+    SELECT 1
+    FROM unnest($1) AS item
+    WHERE EXISTS(SELECT 1 FROM _rrule.after(item, $2) LIMIT 1)
+  );
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 CREATE OR REPLACE FUNCTION _rrule.rruleset_array_has_before_timestamp(_rrule.RRULESET[], TIMESTAMP)
 RETURNS BOOLEAN AS $$
-DECLARE
-  item _rrule.RRULESET;
-BEGIN
-  FOREACH item IN ARRAY $1
-  LOOP
-    IF (SELECT count(*) > 0 FROM _rrule.before(item, $2) LIMIT 1) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-
-  RETURN false;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE STRICT;
+  SELECT EXISTS(
+    SELECT 1
+    FROM unnest($1) AS item
+    WHERE EXISTS(SELECT 1 FROM _rrule.before(item, $2) LIMIT 1)
+  );
+$$ LANGUAGE SQL IMMUTABLE STRICT;
 -- Additional function documentation for public API functions
 -- This supplements existing COMMENT statements in individual function files
 

@@ -21,7 +21,7 @@ BEGIN
   END IF;
 
   -- BY[something-else] is required if BYSETPOS is set.
-  IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
+  IF result."bysetpos" IS NOT NULL AND NOT _rrule.has_any_by_rule(result) THEN
     RAISE EXCEPTION 'BYSETPOS requires at least one other BY* parameter.';
   END IF;
 
@@ -37,6 +37,50 @@ BEGIN
     IF (NOT result."interval" > 0) THEN
       RAISE EXCEPTION 'INTERVAL must be a non-zero integer.';
     END IF;
+  END IF;
+
+  -- COUNT must be positive
+  IF result."count" IS NOT NULL THEN
+    IF (NOT result."count" > 0) THEN
+      RAISE EXCEPTION 'COUNT must be a positive integer.';
+    END IF;
+  END IF;
+
+  -- BY* arrays should not be empty
+  IF result."bymonth" IS NOT NULL AND array_length(result."bymonth", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMONTH cannot be an empty array.';
+  END IF;
+
+  IF result."byweekno" IS NOT NULL AND array_length(result."byweekno", 1) = 0 THEN
+    RAISE EXCEPTION 'BYWEEKNO cannot be an empty array.';
+  END IF;
+
+  IF result."byyearday" IS NOT NULL AND array_length(result."byyearday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYYEARDAY cannot be an empty array.';
+  END IF;
+
+  IF result."bymonthday" IS NOT NULL AND array_length(result."bymonthday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMONTHDAY cannot be an empty array.';
+  END IF;
+
+  IF result."byday" IS NOT NULL AND array_length(result."byday", 1) = 0 THEN
+    RAISE EXCEPTION 'BYDAY cannot be an empty array.';
+  END IF;
+
+  IF result."byhour" IS NOT NULL AND array_length(result."byhour", 1) = 0 THEN
+    RAISE EXCEPTION 'BYHOUR cannot be an empty array.';
+  END IF;
+
+  IF result."byminute" IS NOT NULL AND array_length(result."byminute", 1) = 0 THEN
+    RAISE EXCEPTION 'BYMINUTE cannot be an empty array.';
+  END IF;
+
+  IF result."bysecond" IS NOT NULL AND array_length(result."bysecond", 1) = 0 THEN
+    RAISE EXCEPTION 'BYSECOND cannot be an empty array.';
+  END IF;
+
+  IF result."bysetpos" IS NOT NULL AND array_length(result."bysetpos", 1) = 0 THEN
+    RAISE EXCEPTION 'BYSETPOS cannot be an empty array.';
   END IF;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE STRICT;

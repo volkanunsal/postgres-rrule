@@ -39,26 +39,23 @@ BEGIN
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", dtstart + INTERVAL '6 days', INTERVAL '1 day') "ts"
-      WHERE (
-        "ts"::_rrule.DAY = ANY("rrule"."byday")
-      )
+      WHERE "rrule"."byday" IS NOT NULL
+        AND "ts"::_rrule.DAY = ANY("rrule"."byday")
     ) as "ts"
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", "dtstart" + INTERVAL '2 months', INTERVAL '1 day') "ts"
-      WHERE (
-        EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
-      )
-      AND "ts" <= ("dtstart" + INTERVAL '2 months')
+      WHERE "rrule"."bymonthday" IS NOT NULL
+        AND EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+        AND "ts" <= ("dtstart" + INTERVAL '2 months')
     ) as "ts"
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
       FROM generate_series("dtstart", "dtstart" + INTERVAL '1 year', INTERVAL '1 month') "ts"
-      WHERE (
-        EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
-      )
+      WHERE "rrule"."bymonth" IS NOT NULL
+        AND EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
     ) as "ts"
   )
   SELECT DISTINCT "ts"

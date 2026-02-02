@@ -18,16 +18,8 @@ $$ LANGUAGE SQL STRICT IMMUTABLE;
 
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
 RETURNS BOOLEAN AS $$
-DECLARE
-  item _rrule.RRULESET;
-BEGIN
-  FOREACH item IN ARRAY "rruleset_array" LOOP
-    IF (SELECT _rrule.is_finite(item)) THEN
-      RETURN true;
-    END IF;
-  END LOOP;
-  RETURN false;
-END;
-$$ LANGUAGE plpgsql STRICT IMMUTABLE;
+  SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
+  FROM unnest("rruleset_array") AS item;
+$$ LANGUAGE SQL STRICT IMMUTABLE;
 
 
