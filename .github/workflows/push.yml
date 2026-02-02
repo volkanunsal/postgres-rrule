@@ -32,7 +32,7 @@ jobs:
       - name: 📋 Display PostgreSQL version
         run: |
           echo "Testing against PostgreSQL ${{ matrix.pg-version }}"
-          psql --host postgres --username postgres --version
+          psql --host localhost --username postgres --version
         env:
           PGPASSWORD: unsafe
 
@@ -49,7 +49,7 @@ jobs:
           make local-execute
           echo "✅ Extension loaded successfully"
         env:
-          PGHOST: postgres
+          PGHOST: localhost
           PGPASSWORD: unsafe
           PGUSER: postgres
 
@@ -73,7 +73,7 @@ jobs:
         run: |
           echo "Building and installing pgTAP v1.3.0..."
           make
-          psql --host postgres --username postgres --dbname postgres --file sql/pgtap.sql
+          psql --host localhost --username postgres --dbname postgres --file sql/pgtap.sql
           echo "✅ pgTAP installed successfully"
         env:
           PGPASSWORD: unsafe
@@ -81,7 +81,7 @@ jobs:
       - name: ✅ Verify pgTAP installation
         run: |
           echo "Verifying pgTAP is available..."
-          psql --host postgres --username postgres --dbname postgres --command "SELECT * FROM pg_extension WHERE extname = 'pgtap';"
+          psql --host localhost --username postgres --dbname postgres --command "SELECT * FROM pg_extension WHERE extname = 'pgtap';"
         env:
           PGPASSWORD: unsafe
 
@@ -90,7 +90,7 @@ jobs:
           echo "Running tests against PostgreSQL ${{ matrix.pg-version }}..."
           make local-test
         env:
-          PGHOST: postgres
+          PGHOST: localhost
           PGPASSWORD: unsafe
           PGUSER: postgres
 
