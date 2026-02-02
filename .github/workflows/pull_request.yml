@@ -6,7 +6,7 @@ jobs:
 
     strategy:
       matrix:
-        pg-version: [11, 12]
+        pg-version: [11, 12, 13, 14, 15, 16, 17, 18]
 
     services:
       postgres:
@@ -18,34 +18,34 @@ jobs:
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Compile Source
-      run: make compile
-    - name: Load Source
-      run: make execute
-      env:
-        PGHOST: postgres
-        PGPASSWORD: unsafe
-        PGUSER: postgres
-    - name: Setup pg_prove on runner
-      run: sudo cpan TAP::Parser::SourceHandler::pgTAP
-      env:
-        SHELL: /bin/bash
-    - name: Setup pgtap on target
-      uses: actions/checkout@v2
-      with:
-        repository: theory/pgtap
-        path: pgtap
-        ref: v1.1.0
-    - name: Install pgtap on target
-      working-directory: pgtap
-      run: make && psql --host localhost --username postgres --dbname postgres --file sql/pgtap.sql
-      env:
-        PGPASSWORD: unsafe
-    - name: Run tests
-      run: make test
-      env:
-        PGHOST: postgres
-        PGPASSWORD: unsafe
-        PGUSER: postgres
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Compile Source
+        run: make compile
+      - name: Load Source
+        run: make local-execute
+        env:
+          PGHOST: postgres
+          PGPASSWORD: unsafe
+          PGUSER: postgres
+      - name: Setup pg_prove on runner
+        run: sudo cpan TAP::Parser::SourceHandler::pgTAP
+        env:
+          SHELL: /bin/bash
+      - name: Setup pgtap on target
+        uses: actions/checkout@v4
+        with:
+          repository: theory/pgtap
+          path: pgtap
+          ref: v1.3.0
+      - name: Install pgtap on target
+        working-directory: pgtap
+        run: make && psql --host postgres --username postgres --dbname postgres --file sql/pgtap.sql
+        env:
+          PGPASSWORD: unsafe
+      - name: Run tests
+        run: make local-test
+        env:
+          PGHOST: postgres
+          PGPASSWORD: unsafe
+          PGUSER: postgres

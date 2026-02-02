@@ -1,0 +1,142 @@
+name: CI - Push to Main/Master
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  test-postgres:
+    name: Test on PostgreSQL ${{ matrix.pg-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        pg-version: [11, 12, 13, 14, 15, 16, 17, 18]
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg-version }}
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_PASSWORD: unsafe
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📋 Display PostgreSQL version
+        run: |
+          echo "Testing against PostgreSQL ${{ matrix.pg-version }}"
+          psql --host postgres --username postgres --version
+        env:
+          PGPASSWORD: unsafe
+
+      - name: 🔨 Compile extension source
+        run: |
+          echo "Compiling SQL source files into postgres-rrule.sql..."
+          make compile
+          echo "✅ Compilation successful"
+          ls -lh postgres-rrule.sql
+
+      - name: 📦 Load extension into PostgreSQL
+        run: |
+          echo "Loading extension into PostgreSQL ${{ matrix.pg-version }}..."
+          make local-execute
+          echo "✅ Extension loaded successfully"
+        env:
+          PGHOST: postgres
+          PGPASSWORD: unsafe
+          PGUSER: postgres
+
+      - name: 🔧 Setup pg_prove on runner
+        run: |
+          echo "Installing TAP::Parser::SourceHandler::pgTAP..."
+          sudo cpan TAP::Parser::SourceHandler::pgTAP
+          echo "✅ pg_prove installed"
+        env:
+          SHELL: /bin/bash
+
+      - name: 📥 Checkout pgTAP
+        uses: actions/checkout@v4
+        with:
+          repository: theory/pgtap
+          path: pgtap
+          ref: v1.3.0
+
+      - name: 🔧 Install pgTAP extension
+        working-directory: pgtap
+        run: |
+          echo "Building and installing pgTAP v1.3.0..."
+          make
+          psql --host postgres --username postgres --dbname postgres --file sql/pgtap.sql
+          echo "✅ pgTAP installed successfully"
+        env:
+          PGPASSWORD: unsafe
+
+      - name: ✅ Verify pgTAP installation
+        run: |
+          echo "Verifying pgTAP is available..."
+          psql --host postgres --username postgres --dbname postgres --command "SELECT * FROM pg_extension WHERE extname = 'pgtap';"
+        env:
+          PGPASSWORD: unsafe
+
+      - name: 🧪 Run test suite
+        run: |
+          echo "Running tests against PostgreSQL ${{ matrix.pg-version }}..."
+          make local-test
+        env:
+          PGHOST: postgres
+          PGPASSWORD: unsafe
+          PGUSER: postgres
+
+      - name: 📊 Test results summary
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ All tests passed on PostgreSQL ${{ matrix.pg-version }}"
+          else
+            echo "❌ Tests failed on PostgreSQL ${{ matrix.pg-version }}"
+          fi
+
+  build-summary:
+    name: Build Summary
+    runs-on: ubuntu-latest
+    needs: test-postgres
+    if: always()
+
+    steps:
+      - name: 📊 Generate summary
+        run: |
+          echo "# CI Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.test-postgres.result }}" == "success" ]; then
+            echo "✅ **All PostgreSQL versions passed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Tested successfully against PostgreSQL 11, 12, 13, 14, 15, 16, 17, and 18." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Some tests failed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check individual job logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: ✅ Success notification
+        if: needs.test-postgres.result == 'success'
+        run: |
+          echo "🎉 All tests passed successfully!"
+          echo "The extension is ready for production use."
+
+      - name: ❌ Failure notification
+        if: needs.test-postgres.result != 'success'
+        run: |
+          echo "⚠️ Tests failed. Please review the logs."
+          exit 1
