@@ -1,6 +1,3 @@
--- postgres-rrule v0.1.1
--- Generated on 2026-02-02 16:37:21 UTC
-
 DROP SCHEMA IF EXISTS _rrule CASCADE;
 
 DROP CAST IF EXISTS (_rrule.RRULE AS TEXT);
@@ -948,11 +945,11 @@ BEGIN
     END;
   END IF;
 
-  -- Parse RRULE and EXRULE
-  result."rrule" := _rrule.rrule($1);
+  -- Parse RRULE and EXRULE (wrap in arrays since schema uses RRULE[])
+  result."rrule" := ARRAY[_rrule.rrule($1)];
 
   IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
-    result."exrule" := _rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'));
+    result."exrule" := ARRAY[_rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'))];
   END IF;
 
   -- Parse RDATE array with error handling
@@ -1004,27 +1001,21 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- Returns true if the ruleset has a defined end.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE and optional EXRULE
+--   rruleset - The ruleset containing RRULE array and optional EXRULE array
 --
--- Returns: True if the RRULE has COUNT or UNTIL set
+-- Returns: True if at least one RRULE has COUNT or UNTIL set
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  SELECT _rrule.is_finite("rruleset"."rrule")
+  SELECT COALESCE(bool_or(_rrule.is_finite(r)), false)
+  FROM unnest("rruleset"."rrule") AS r;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 
--- Returns true if any ruleset in the array has a defined end.
---
--- Parameters:
---   rruleset_array - Array of rulesets to check
---
--- Returns: True if at least one ruleset has COUNT or UNTIL set
-CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
+-- Check if an array of RRULEs has at least one finite recurrence
+CREATE OR REPLACE FUNCTION _rrule.is_finite("rrule_array" _rrule.RRULE[])
 RETURNS BOOLEAN AS $$
-  SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
-  FROM unnest("rruleset_array") AS item;
+  SELECT COALESCE(bool_or(_rrule.is_finite(r)), false)
+  FROM unnest("rrule_array") AS r;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
-
-
 -- Generates all occurrences for a recurrence rule.
 --
 -- Parameters:
@@ -1186,7 +1177,13 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM unnest("rruleset_array") AS rruleset,
        LATERAL _rrule.occurrences(rruleset, "tsrange") AS occurrence
   ORDER BY occurrence;
-$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;-- Returns the first occurrence of a recurrence rule.
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;-- Check if an array of RRULESETs has at least one finite occurrence
+CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
+RETURNS BOOLEAN AS $$
+  SELECT COALESCE(bool_or(_rrule.is_finite(r)), false)
+  FROM unnest("rruleset_array") AS r;
+$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
+-- Returns the first occurrence of a recurrence rule.
 --
 -- Parameters:
 --   rrule   - The recurrence rule defining the pattern

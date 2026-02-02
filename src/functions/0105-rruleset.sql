@@ -40,11 +40,11 @@ BEGIN
     END;
   END IF;
 
-  -- Parse RRULE and EXRULE
-  result."rrule" := _rrule.rrule($1);
+  -- Parse RRULE and EXRULE (wrap in arrays since schema uses RRULE[])
+  result."rrule" := ARRAY[_rrule.rrule($1)];
 
   IF _rrule.extract_line($1, 'EXRULE') IS NOT NULL THEN
-    result."exrule" := _rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'));
+    result."exrule" := ARRAY[_rrule.rrule('RRULE:' || _rrule.extract_line($1, 'EXRULE'))];
   END IF;
 
   -- Parse RDATE array with error handling

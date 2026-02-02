@@ -26,24 +26,12 @@ $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 -- Returns true if the ruleset has a defined end.
 --
 -- Parameters:
---   rruleset - The ruleset containing RRULE and optional EXRULE
+--   rruleset - The ruleset containing RRULE array and optional EXRULE array
 --
--- Returns: True if the RRULE has COUNT or UNTIL set
+-- Returns: True if at least one RRULE has COUNT or UNTIL set
 CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset" _rrule.RRULESET)
 RETURNS BOOLEAN AS $$
-  SELECT _rrule.is_finite("rruleset"."rrule")
+  SELECT COALESCE(bool_or(_rrule.is_finite(r)), false)
+  FROM unnest("rruleset"."rrule") AS r;
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
-
--- Returns true if any ruleset in the array has a defined end.
---
--- Parameters:
---   rruleset_array - Array of rulesets to check
---
--- Returns: True if at least one ruleset has COUNT or UNTIL set
-CREATE OR REPLACE FUNCTION _rrule.is_finite("rruleset_array" _rrule.RRULESET[])
-RETURNS BOOLEAN AS $$
-  SELECT COALESCE(bool_or(_rrule.is_finite(item)), false)
-  FROM unnest("rruleset_array") AS item;
-$$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
-
 

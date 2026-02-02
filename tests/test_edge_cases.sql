@@ -123,7 +123,7 @@ SELECT ok(
 -- Test DTEND equals DTSTART (zero duration)
 SELECT ok(
     (_rrule.jsonb_to_rruleset(
-        '{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY"}}'::jsonb
+        '{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY"}]}'::jsonb
     )).dtstart IS NOT NULL,
     'DTEND equals DTSTART (zero duration) is valid'
 );

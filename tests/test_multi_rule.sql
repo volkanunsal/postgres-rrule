@@ -73,7 +73,7 @@ SELECT is(
     (SELECT count(*) FROM _rrule.occurrences(
         _rrule.jsonb_to_rruleset('{
             "dtstart": "2026-01-01T09:00:00",
-            "rrule": {"freq": "DAILY", "count": 5}
+            "rrule": [{"freq": "DAILY", "count": 5}]
         }'::jsonb)
     )),
     5::bigint,

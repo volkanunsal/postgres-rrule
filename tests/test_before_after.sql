@@ -69,7 +69,7 @@ SELECT is(
 -- Test rruleset_has_before_timestamp
 SELECT is(
     _rrule.rruleset_has_before_timestamp(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb),
         '1997-09-05T09:00:00'::timestamp
     ),
     true,
@@ -78,7 +78,7 @@ SELECT is(
 
 SELECT is(
     _rrule.rruleset_has_before_timestamp(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb),
         '1997-09-01T09:00:00'::timestamp
     ),
     false,
@@ -88,7 +88,7 @@ SELECT is(
 -- Test rruleset_has_after_timestamp
 SELECT is(
     _rrule.rruleset_has_after_timestamp(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb),
         '1997-09-05T09:00:00'::timestamp
     ),
     true,
@@ -97,7 +97,7 @@ SELECT is(
 
 SELECT is(
     _rrule.rruleset_has_after_timestamp(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 3}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 3}]}'::jsonb),
         '1997-09-10T09:00:00'::timestamp
     ),
     false,
@@ -107,7 +107,7 @@ SELECT is(
 -- Test before() with RRULESET
 SELECT is(
     (SELECT count(*) FROM _rrule.before(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb),
         '1997-09-05T09:00:00'::timestamp
     )),
     4::bigint,
@@ -117,7 +117,7 @@ SELECT is(
 -- Test after() with RRULESET
 SELECT is(
     (SELECT count(*) FROM _rrule.after(
-        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 10}}'::jsonb),
+        _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 10}]}'::jsonb),
         '1997-09-05T09:00:00'::timestamp
     )),
     7::bigint,
@@ -128,8 +128,8 @@ SELECT is(
 SELECT is(
     (SELECT count(*) FROM _rrule.before(
         ARRAY[
-            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 3}}'::jsonb),
-            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-10T09:00:00", "rrule": {"freq": "DAILY", "count": 3}}'::jsonb)
+            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 3}]}'::jsonb),
+            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-10T09:00:00", "rrule": [{"freq": "DAILY", "count": 3}]}'::jsonb)
         ],
         '1997-09-11T09:00:00'::timestamp
     )),
@@ -141,8 +141,8 @@ SELECT is(
 SELECT is(
     (SELECT count(*) FROM _rrule.after(
         ARRAY[
-            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": {"freq": "DAILY", "count": 3}}'::jsonb),
-            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-10T09:00:00", "rrule": {"freq": "DAILY", "count": 3}}'::jsonb)
+            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "rrule": [{"freq": "DAILY", "count": 3}]}'::jsonb),
+            _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-10T09:00:00", "rrule": [{"freq": "DAILY", "count": 3}]}'::jsonb)
         ],
         '1997-09-03T09:00:00'::timestamp
     )),

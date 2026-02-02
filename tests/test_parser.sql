@@ -85,7 +85,7 @@ SELECT is(
     (rruleset('DTSTART:20230724T100000
 RRULE:FREQ=WEEKLY;BYDAY=MO,WE
 EXRULE:FREQ=WEEKLY;BYDAY=MO,WE'))."exrule",
-    '(WEEKLY,1,,,,,,"{MO,WE}",,,,,,MO)',
+    '{"(WEEKLY,1,,,,,,\"{MO,WE}\",,,,,,MO)"}',
     'EXRULE is parsed correctly'
 );
 
@@ -93,7 +93,7 @@ SELECT is(
     (rruleset('DTSTART:20230724T100000
 RRULE:FREQ=DAILY;COUNT=10
 EXRULE:FREQ=WEEKLY;BYDAY=FR'))."exrule",
-    '(WEEKLY,1,,,,,,{FR},,,,,,MO)',
+    '{"(WEEKLY,1,,,,,,{FR},,,,,,MO)"}',
     'EXRULE with different FREQ than RRULE is parsed correctly'
 );
 

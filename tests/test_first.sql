@@ -69,7 +69,7 @@ SELECT is(
 
 SELECT is(
   _rrule.first(
-    _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}, "exrule": {}}'::jsonb)
+    _rrule.jsonb_to_rruleset('{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-03T09:00:00", "rrule": [{"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}]}'::jsonb)
   ),
   '1997-09-02T09:00:00'::TIMESTAMP,
   'when argument is rruleset.'
@@ -77,7 +77,7 @@ SELECT is(
 
 SELECT is(
   _rrule.first(
-    _rrule.jsonb_to_rruleset_array('[{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-03T09:00:00", "rrule": {"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}}]'::jsonb)
+    _rrule.jsonb_to_rruleset_array('[{"dtstart": "1997-09-02T09:00:00", "dtend": "1997-09-03T09:00:00", "rrule": [{"freq": "WEEKLY", "wkst": "MO", "count": 4, "interval": 1}]}]'::jsonb)
   ),
   '1997-09-02T09:00:00'::TIMESTAMP,
   'when argument is rruleset array.'
