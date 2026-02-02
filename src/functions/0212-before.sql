@@ -20,7 +20,7 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rruleset", tsrange(NULL, "when", '[]'));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
--- TODO: test
+-- Returns all occurrences from an array of rulesets that occur before a given timestamp.
 CREATE OR REPLACE FUNCTION _rrule.before("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *

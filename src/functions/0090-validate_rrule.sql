@@ -3,7 +3,7 @@ RETURNS void AS $$
 BEGIN
   -- FREQ is required
   IF result."freq" IS NULL THEN
-    RAISE EXCEPTION 'FREQ cannot be null';
+    RAISE EXCEPTION 'FREQ cannot be null.';
   END IF;
 
   -- FREQ=YEARLY required if BYWEEKNO is provided
@@ -22,7 +22,7 @@ BEGIN
 
   -- BY[something-else] is required if BYSETPOS is set.
   IF (result."bysetpos" IS NOT NULL AND result."bymonth" IS NULL AND result."byweekno" IS NULL AND result."byyearday" IS NULL AND result."bymonthday" IS NULL AND result."byday" IS NULL AND result."byhour" IS NULL AND result."byminute" IS NULL AND result."bysecond" IS NULL) THEN
-    RAISE EXCEPTION 'BYSETPOS requires at least one other BY*';
+    RAISE EXCEPTION 'BYSETPOS requires at least one other BY* parameter.';
   END IF;
 
   IF result."freq" = 'DAILY' AND result."byday" IS NOT NULL THEN
@@ -30,7 +30,7 @@ BEGIN
   END IF;
 
   IF result."until" IS NOT NULL AND result."count" IS NOT NULL THEN
-    RAISE EXCEPTION 'UNTIL and COUNT MUST NOT occur in the same recurrence.';
+    RAISE EXCEPTION 'UNTIL and COUNT must not occur in the same recurrence.';
   END IF;
 
   IF result."interval" IS NOT NULL THEN

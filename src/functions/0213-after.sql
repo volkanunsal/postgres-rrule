@@ -25,7 +25,7 @@ RETURNS SETOF TIMESTAMP AS $$
   FROM _rrule.occurrences("rruleset", tsrange("when", NULL));
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
--- TODO: test
+-- Returns all occurrences from an array of rulesets that occur after a given timestamp.
 CREATE OR REPLACE FUNCTION _rrule.after("rruleset_array" _rrule.RRULESET[], "when" TIMESTAMP)
 RETURNS SETOF TIMESTAMP AS $$
   SELECT *

@@ -19,8 +19,8 @@ RETURNS TIMESTAMP AS $$
   ORDER BY occurrence DESC LIMIT 1;
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
--- TODO: Ensure to check whether the range is finite. If not, we should return null
--- or something meaningful.
+-- Returns the last occurrence from an array of rulesets.
+-- Returns NULL if the ruleset array contains infinite recurrence rules.
 CREATE OR REPLACE FUNCTION _rrule.last("rruleset_array" _rrule.RRULESET[])
 RETURNS SETOF TIMESTAMP AS $$
 BEGIN

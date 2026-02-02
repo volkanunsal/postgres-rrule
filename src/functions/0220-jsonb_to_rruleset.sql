@@ -20,7 +20,14 @@ BEGIN
     "exdate" text[]
   );
 
-  -- TODO: validate rruleset
+  -- Validate rruleset
+  IF result."dtstart" IS NULL THEN
+    RAISE EXCEPTION 'DTSTART cannot be null.';
+  END IF;
+
+  IF result."dtend" IS NOT NULL AND result."dtend" < result."dtstart" THEN
+    RAISE EXCEPTION 'DTEND must be greater than or equal to DTSTART.';
+  END IF;
 
   RETURN result;
 END;

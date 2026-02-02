@@ -27,7 +27,7 @@ SELECT is(
 PREPARE my_thrower AS SELECT rrule('');
 SELECT throws_like(
     'my_thrower',
-    'FREQ cannot be null',
+    'FREQ cannot be null.',
     'Empty string raises exception.'
 );
 
@@ -55,8 +55,8 @@ SELECT throws_like(
 PREPARE my_thrower5 AS SELECT rrule('RRULE:FREQ=DAILY;BYSETPOS=1');
 SELECT throws_like(
     'my_thrower5',
-    'BYSETPOS requires at least one other BY*',
-    'BYSETPOS requires at least one other BY*'
+    'BYSETPOS requires at least one other BY* parameter.',
+    'BYSETPOS requires at least one other BY* parameter.'
 );
 
 PREPARE my_thrower6 AS SELECT rrule('RRULE:FREQ=DAILY;BYDAY=TU');
@@ -69,8 +69,8 @@ SELECT throws_like(
 PREPARE my_thrower7 AS SELECT rrule('RRULE:FREQ=DAILY;UNTIL=19971224T000000;COUNT=3');
 SELECT throws_like(
     'my_thrower7',
-    'UNTIL and COUNT MUST NOT occur in the same recurrence.',
-    'UNTIL and COUNT MUST NOT occur in the same recurrence.'
+    'UNTIL and COUNT must not occur in the same recurrence.',
+    'UNTIL and COUNT must not occur in the same recurrence.'
 );
 
 PREPARE my_thrower8 AS SELECT rrule('RRULE:FREQ=DAILY;INTERVAL=-1');

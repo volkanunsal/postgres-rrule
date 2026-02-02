@@ -93,10 +93,10 @@ RETURNS SETOF TIMESTAMP AS $$
   SELECT _rrule.occurrences("rruleset", '(,)'::TSRANGE);
 $$ LANGUAGE SQL STRICT IMMUTABLE;
 
+-- Returns all occurrences from an array of rulesets within a given time range.
 CREATE OR REPLACE FUNCTION _rrule.occurrences(
   "rruleset_array" _rrule.RRULESET[],
   "tsrange" TSRANGE
-  -- TODO: add a default limit and then use that limit from `first` and `last`
 )
 RETURNS SETOF TIMESTAMP AS $$
 DECLARE

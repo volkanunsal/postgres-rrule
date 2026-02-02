@@ -4,10 +4,10 @@ DECLARE
   result _rrule.RRULE;
 BEGIN
   WITH "tokens" AS (
-    WITH A20 as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
+    WITH parsed_line as (SELECT _rrule.parse_line($1::text, 'RRULE') "r"),
     -- Split each key value pair into an array, e.g. {'FREQ', 'DAILY'}
-    A30 as (SELECT regexp_split_to_array("r", '=') AS "y" FROM A20)
-    SELECT "y"[1] AS "key", "y"[2] AS "val" FROM A30
+    key_value_pairs as (SELECT regexp_split_to_array("r", '=') AS "y" FROM parsed_line)
+    SELECT "y"[1] AS "key", "y"[2] AS "val" FROM key_value_pairs
   ),
   candidate AS (
     SELECT

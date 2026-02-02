@@ -15,7 +15,7 @@ DECLARE
 BEGIN
   RETURN QUERY WITH
   "year" as (SELECT EXTRACT(YEAR FROM "dtstart")::integer AS "year"),
-  A10 as (
+  timestamp_combinations as (
     SELECT
       make_timestamp(
         "year"."year",
@@ -32,9 +32,9 @@ BEGIN
     LEFT OUTER JOIN unnest(("rrule")."byminute") AS "byminute" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bysecond") AS "bysecond" ON (true)
   ),
-  A11 as (
+  candidate_timestamps as (
     SELECT DISTINCT "ts"
-    FROM A10
+    FROM timestamp_combinations
     UNION
     SELECT "ts" FROM (
       SELECT "ts"
@@ -62,7 +62,7 @@ BEGIN
     ) as "ts"
   )
   SELECT DISTINCT "ts"
-  FROM A11
+  FROM candidate_timestamps
   WHERE (
     "rrule"."byday" IS NULL OR "ts"::_rrule.DAY = ANY("rrule"."byday")
   )
