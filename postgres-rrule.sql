@@ -1,3 +1,6 @@
+-- postgres-rrule v0.1.1
+-- Generated on 2026-02-02 16:37:21 UTC
+
 DROP SCHEMA IF EXISTS _rrule CASCADE;
 
 DROP CAST IF EXISTS (_rrule.RRULE AS TEXT);
