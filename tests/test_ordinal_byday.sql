@@ -1,6 +1,6 @@
 BEGIN;
 
-SELECT plan(17);
+SELECT plan(19);
 
 SET search_path TO _rrule, public;
 
@@ -163,6 +163,27 @@ SELECT is(
     ) AS occurrences LIMIT 1),
     14,
     'Ordinal BYDAY: time component from dtstart preserved'
+);
+
+-- Test 16: Explicit INTERVAL=1 with ordinal BYDAY
+SELECT is(
+    (SELECT array_agg(occurrences ORDER BY occurrences) FROM _rrule.occurrences(
+        _rrule.rrule('RRULE:FREQ=MONTHLY;COUNT=3;INTERVAL=1;BYDAY=1TU'),
+        '2026-01-01T09:00:00'::timestamp
+    ) AS occurrences),
+    ARRAY[
+        '2026-01-06T09:00:00'::timestamp,
+        '2026-02-03T09:00:00'::timestamp,
+        '2026-03-03T09:00:00'::timestamp
+    ],
+    'Explicit INTERVAL=1 with ordinal BYDAY: correct first Tuesday each month'
+);
+
+-- Test 17: Text round-trip with explicit INTERVAL=1
+SELECT is(
+    _rrule.text(_rrule.rrule('RRULE:FREQ=MONTHLY;COUNT=3;INTERVAL=1;BYDAY=1TU')),
+    'RRULE:FREQ=MONTHLY;COUNT=3;BYDAY=1TU',
+    'Text round-trip: INTERVAL=1 normalized to default (omitted)'
 );
 
 SELECT * FROM finish();
