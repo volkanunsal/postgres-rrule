@@ -21,6 +21,7 @@ BEGIN
   RETURN jsonb_strip_nulls(jsonb_build_object(
     'dtstart', "input"."dtstart",
     'dtend', "input"."dtend",
+    'tzid', "input"."tzid",
     'rrule', rrule_array,
     'exrule', exrule_array,
     'rdate', "input"."rdate",

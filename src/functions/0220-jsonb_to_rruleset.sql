@@ -22,14 +22,16 @@ BEGIN
   SELECT
     "dtstart",
     "dtend",
+    "tzid",
     "rrule",
     "exrule",
     "rdate",
     "exdate"
-  INTO dtstart_text, dtend_text, rrule_json, exrule_json, rdate_text, exdate_text
+  INTO dtstart_text, dtend_text, result."tzid", rrule_json, exrule_json, rdate_text, exdate_text
   FROM jsonb_to_record("input") as x(
     "dtstart" text,
     "dtend" text,
+    "tzid" text,
     "rrule" jsonb,
     "exrule" jsonb,
     "rdate" text[],

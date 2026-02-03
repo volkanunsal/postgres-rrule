@@ -23,11 +23,19 @@ BEGIN
   exdate_text := _rrule.extract_line($1, 'EXDATE');
 
   -- Parse DTSTART with error handling
+  -- Handle RFC 5545 TZID parameter: DTSTART;TZID=Europe/Belgrade:20221026T050000
   IF dtstart_text IS NOT NULL THEN
+    IF dtstart_text ~ ';TZID=' THEN
+      -- Extract timezone identifier (between TZID= and :)
+      result."tzid" := substring(dtstart_text from ';TZID=([^:]+):');
+      -- Extract timestamp (after the colon following TZID)
+      dtstart_text := substring(dtstart_text from ':([^:]+)$');
+    END IF;
+
     BEGIN
       result."dtstart" := dtstart_text::TIMESTAMP;
     EXCEPTION WHEN OTHERS THEN
-      RAISE EXCEPTION 'Invalid DTSTART format: "%". Expected format: DTSTART:YYYYMMDDTHHMMSS', dtstart_text;
+      RAISE EXCEPTION 'Invalid DTSTART format: "%". Expected format: DTSTART:YYYYMMDDTHHMMSS or DTSTART;TZID=timezone:YYYYMMDDTHHMMSS', dtstart_text;
     END;
   END IF;
 

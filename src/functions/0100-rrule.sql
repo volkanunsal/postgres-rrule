@@ -58,11 +58,16 @@ BEGIN
   FROM candidate;
 
   -- Parse UNTIL with better error handling
+  -- Per RFC 5545 recommendation, UNTIL is stored as UTC
+  -- Strip Z suffix if present before parsing
   IF v_until_text IS NOT NULL THEN
+    -- Strip the Z suffix if present (RFC 5545 UTC indicator)
+    v_until_text := regexp_replace(v_until_text, 'Z$', '');
+
     BEGIN
       result."until" := v_until_text::TIMESTAMP;
     EXCEPTION WHEN OTHERS THEN
-      RAISE EXCEPTION 'Invalid UNTIL timestamp format: "%". Expected format: YYYYMMDDTHHMMSS', v_until_text;
+      RAISE EXCEPTION 'Invalid UNTIL timestamp format: "%". Expected format: YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSSZ', v_until_text;
     END;
   END IF;
 

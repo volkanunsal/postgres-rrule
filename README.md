@@ -10,6 +10,7 @@ A PostgreSQL extension for working with recurring dates and events using the iCa
 - Generate occurrence sequences from recurrence rules
 - Support for EXDATE, RDATE, and EXRULE for complex recurrence patterns
 - Built-in operators for containment checking
+- **Timezone support with automatic DST handling** - Properly handle recurring events across daylight saving time transitions
 
 **Important Limitation:** This extension requires all recurrence rules to include either `UNTIL` (end date) or `COUNT` (number of occurrences). Infinite recurrence rules are not supported.
 
@@ -18,6 +19,7 @@ A PostgreSQL extension for working with recurring dates and events using the iCa
 - [Installation](#installation)
 - [Docker Development Environment](#docker-development-environment)
 - [Quick Start](#quick-start)
+- [Timezone Support](#timezone-support)
 - [How It Works](#how-it-works)
 - [Examples](#examples)
 - [API Reference](#api-reference)
@@ -209,6 +211,61 @@ SELECT * FROM occurrences(
 -- 2026-01-04 10:00:00
 -- 2026-01-05 10:00:00
 ```
+
+## Timezone Support
+
+The extension provides comprehensive timezone support for handling recurring events across daylight saving time (DST) transitions. Events maintain their local time even when DST rules change.
+
+### Quick Example
+
+```sql
+-- Generate timezone-aware occurrences
+-- Event: "Every Wednesday at 5:00 AM Europe/Belgrade"
+SELECT * FROM _rrule.occurrences_tz(
+  _rrule.rrule('RRULE:FREQ=WEEKLY;BYDAY=WE;COUNT=3'),
+  '2022-10-26T05:00:00'::timestamp,
+  'Europe/Belgrade'
+);
+
+-- Returns TIMESTAMPTZ values (in UTC):
+-- 2022-10-26 03:00:00+00  (05:00 CEST, UTC+2)
+-- 2022-11-02 04:00:00+00  (05:00 CET, UTC+1) ← DST transition handled!
+-- 2022-11-09 04:00:00+00  (05:00 CET, UTC+1)
+```
+
+Notice how the UTC time shifts from 03:00 to 04:00 after the DST transition on October 30, 2022, while the local time stays at 05:00.
+
+### Storing Timezone Information
+
+Use RFC 5545 TZID format or JSON:
+
+```sql
+-- Text format with TZID
+SELECT _rrule.rruleset('DTSTART;TZID=America/New_York:20220101T090000
+RRULE:FREQ=DAILY;COUNT=5');
+
+-- JSON format with tzid
+SELECT _rrule.jsonb_to_rruleset('{
+  "dtstart": "2022-01-01T09:00:00",
+  "tzid": "America/New_York",
+  "rrule": [{"freq": "DAILY", "count": 5}]
+}'::jsonb);
+```
+
+### New Functions
+
+- `occurrences_tz(rrule, dtstart, tzid)` - Timezone-aware occurrences
+- `occurrences_tz(rruleset)` - Uses tzid from RRULESET
+- Returns `TIMESTAMPTZ` values with proper DST handling
+
+### Documentation
+
+See [docs/TIMEZONE_SUPPORT.md](docs/TIMEZONE_SUPPORT.md) for comprehensive documentation including:
+- Detailed API reference
+- DST handling examples
+- Migration guide for existing code
+- RFC 5545 compliance details
+- Troubleshooting tips
 
 ## How It Works
 

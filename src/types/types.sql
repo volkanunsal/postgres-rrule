@@ -20,7 +20,7 @@ CREATE TABLE _rrule.RRULE (
   "freq" _rrule.FREQ NOT NULL,
   "interval" INTEGER DEFAULT 1 NOT NULL CHECK(0 < "interval"),
   "count" INTEGER,  -- Number of occurrences to generate (RFC 5545: positive integer)
-  "until" TIMESTAMP,  -- End date for recurrence (RFC 5545: cannot coexist with COUNT)
+  "until" TIMESTAMP,  -- End date for recurrence (RFC 5545: stored as UTC, cannot coexist with COUNT)
 
   -- Time component constraints (RFC 5545 section 3.3.10)
   "bysecond" INTEGER[] CHECK (0 <= ALL("bysecond") AND 60 > ALL("bysecond")),  -- 0-59 (60 for leap second)
@@ -45,6 +45,7 @@ CREATE TABLE _rrule.RRULE (
 CREATE TABLE _rrule.RRULESET (
   "dtstart" TIMESTAMP NOT NULL,
   "dtend" TIMESTAMP,
+  "tzid" TEXT DEFAULT NULL,  -- RFC 5545: Timezone identifier (e.g., 'Europe/Belgrade', 'America/New_York')
   "rrule" _rrule.RRULE[],  -- RFC 5545: Multiple RRULEs allowed
   "exrule" _rrule.RRULE[],  -- RFC 5545: Multiple EXRULEs allowed
   "rdate" TIMESTAMP[],
