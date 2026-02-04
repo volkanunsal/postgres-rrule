@@ -11,11 +11,13 @@ The release automation system provides a complete, idempotent workflow for creat
 ### 1. Version Management
 
 **File**: `VERSION`
+
 - Contains the current version in semver format (MAJOR.MINOR.PATCH)
 - Single source of truth for version number
 - Used by scripts to determine next version
 
 **Script**: `scripts/semver-bump.sh`
+
 - Pure bash implementation of semantic version bumping
 - Supports major, minor, and patch bumps
 - Validates version format
@@ -24,6 +26,7 @@ The release automation system provides a complete, idempotent workflow for creat
 ### 2. Changelog Generation
 
 **Script**: `scripts/generate-changelog.sh`
+
 - Automatically generates CHANGELOG.md from git commit history
 - Parses conventional commit messages
 - Groups changes by type (Features, Bug Fixes, etc.)
@@ -31,6 +34,7 @@ The release automation system provides a complete, idempotent workflow for creat
 - Supports both first release and incremental updates
 
 **File**: `CHANGELOG.md`
+
 - Automatically maintained changelog
 - Follows [Keep a Changelog](https://keepachangelog.com/) format
 - Organized by version and date
@@ -39,6 +43,7 @@ The release automation system provides a complete, idempotent workflow for creat
 ### 3. Release Preparation
 
 **Script**: `scripts/prepare-release.sh`
+
 - Main release orchestration script
 - Performs all release steps in correct order
 - Safety checks (clean working directory, git repo validation)
@@ -47,6 +52,7 @@ The release automation system provides a complete, idempotent workflow for creat
 - Color-coded output for clarity
 
 **Process**:
+
 1. Validates environment (git available, clean working directory)
 2. Reads current version from VERSION file
 3. Calculates new version using semver-bump.sh
@@ -59,6 +65,7 @@ The release automation system provides a complete, idempotent workflow for creat
 ### 4. Release Publishing
 
 **Script**: `scripts/push-release.sh`
+
 - Handles pushing release to remote repository
 - Confirmation prompts for safety
 - Shows summary of what will be pushed
@@ -66,6 +73,7 @@ The release automation system provides a complete, idempotent workflow for creat
 - Optional GitHub release creation (if gh CLI available)
 
 **Features**:
+
 - Pre-push validation
 - Remote tag existence check
 - Interactive confirmation
@@ -86,18 +94,21 @@ make show-version     # Display current version
 ```
 
 **Updated**:
+
 - Help text includes release management section
 - Compilation targets support version injection
 
 ### 6. Documentation
 
 **README.md**:
+
 - New "Release Management" section
 - Complete usage examples
 - Workflow documentation
 - Troubleshooting guide
 
 **.github/RELEASE.md**:
+
 - Detailed maintainer guide
 - Step-by-step release process
 - Conventional commits reference
@@ -128,11 +139,13 @@ Multiple safety checks prevent mistakes:
 ### 3. Zero External Dependencies
 
 Core functionality requires only:
+
 - bash
 - git
 - make
 
 Optional enhancements:
+
 - `gh` CLI for GitHub releases (optional)
 
 ### 4. Conventional Commits
@@ -144,6 +157,7 @@ Changelog generation relies on structured commit messages:
 ```
 
 Supported types:
+
 - `feat`: Features
 - `fix`: Bug Fixes
 - `docs`: Documentation
