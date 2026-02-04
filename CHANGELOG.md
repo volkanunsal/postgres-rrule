@@ -1,3 +1,12 @@
+## [2.1.0] - 2026-02-04
+### ✨ Features
+
+- Add release manager and notes writer agents for automated release process (5e05d1b)
+- Add comprehensive timezone support for recurring events (5b4719d)
+- **(tests)**: Add tests for explicit INTERVAL=1 with ordinal BYDAY and text round-trip normalization (31a9dc0)
+- Update RRULE and EXRULE parsing to support array format in new schema (c632c1b)
+
+
 ## [2.0.0] - 2026-02-02
 ### ✨ Features
 
