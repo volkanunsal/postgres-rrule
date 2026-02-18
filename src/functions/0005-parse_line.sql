@@ -1,7 +1,7 @@
 CREATE OR REPLACE FUNCTION _rrule.parse_line (input TEXT, marker TEXT)
 RETURNS SETOF TEXT AS $$
   -- Clear spaces at the front of the lines
-  WITH trimmed_input as (SELECT regexp_replace(input, '^\s*',  '', 'ng') "r"),
+  WITH trimmed_input as (SELECT regexp_replace(input, '^[ \t]*',  '', 'ng') "r"),
   -- Clear all lines except the ones starting with marker
   filtered_lines as (SELECT regexp_replace(trimmed_input."r", '^(?!' || marker || ').*?$',  '', 'ng') "r" FROM trimmed_input),
   -- Replace carriage returns with blank space.
