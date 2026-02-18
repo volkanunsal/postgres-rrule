@@ -40,7 +40,16 @@ BEGIN
       make_timestamp(
         "year"."year",
         COALESCE("bymonth", month),
-        COALESCE("bymonthday", day),
+        COALESCE(
+          -- Resolve negative BYMONTHDAY values to actual day numbers for the target month
+          CASE WHEN "bymonthday" IS NOT NULL THEN
+            _rrule.resolve_bymonthday(
+              "bymonthday",
+              make_timestamp("year"."year", COALESCE("bymonth", month), 1, 0, 0, 0)
+            )
+          ELSE NULL END,
+          day
+        ),
         COALESCE("byhour", hour),
         COALESCE("byminute", minute),
         COALESCE("bysecond", second)
@@ -51,6 +60,11 @@ BEGIN
     LEFT OUTER JOIN unnest(("rrule")."byhour") AS "byhour" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."byminute") AS "byminute" ON (true)
     LEFT OUTER JOIN unnest(("rrule")."bysecond") AS "bysecond" ON (true)
+    WHERE "bymonthday" IS NULL
+      OR _rrule.resolve_bymonthday(
+           "bymonthday",
+           make_timestamp("year"."year", COALESCE("bymonth", month), 1, 0, 0, 0)
+         ) IS NOT NULL
   ),
   candidate_timestamps as (
     SELECT DISTINCT "ts"
@@ -91,7 +105,11 @@ BEGIN
       SELECT "ts"
       FROM generate_series("dtstart", "dtstart" + INTERVAL '2 months', INTERVAL '1 day') "ts"
       WHERE "rrule"."bymonthday" IS NOT NULL
-        AND EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+        AND EXTRACT(DAY FROM "ts") = ANY(
+          SELECT _rrule.resolve_bymonthday(bmd, "ts")
+          FROM unnest("rrule"."bymonthday") AS bmd
+          WHERE _rrule.resolve_bymonthday(bmd, "ts") IS NOT NULL
+        )
         AND "ts" <= ("dtstart" + INTERVAL '2 months')
     ) as "ts"
     UNION
@@ -135,7 +153,11 @@ BEGIN
     "rrule"."bymonth" IS NULL OR EXTRACT(MONTH FROM "ts") = ANY("rrule"."bymonth")
   )
   AND (
-    "rrule"."bymonthday" IS NULL OR EXTRACT(DAY FROM "ts") = ANY("rrule"."bymonthday")
+    "rrule"."bymonthday" IS NULL OR EXTRACT(DAY FROM "ts") = ANY(
+      SELECT _rrule.resolve_bymonthday(bmd, "ts")
+      FROM unnest("rrule"."bymonthday") AS bmd
+      WHERE _rrule.resolve_bymonthday(bmd, "ts") IS NOT NULL
+    )
   )
   ORDER BY "ts";
 

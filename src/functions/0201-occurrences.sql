@@ -27,6 +27,16 @@ BEGIN
     END IF;
   END IF;
 
+  -- Check if BYMONTHDAY contains negative values (e.g., -1 = last day of month)
+  -- These require per-month resolution since generate_series with monthly intervals
+  -- causes day drift (Jan 31 + 1 month = Feb 28, Feb 28 + 1 month = Mar 28, not Mar 31)
+  IF "rrule"."bymonthday" IS NOT NULL AND "rrule"."freq" IN ('MONTHLY', 'YEARLY') THEN
+    IF EXISTS (SELECT 1 FROM unnest("rrule"."bymonthday") v WHERE v < 0) THEN
+      RETURN QUERY SELECT _rrule.occurrences_bymonthday("rrule", "dtstart");
+      RETURN;
+    END IF;
+  END IF;
+
   -- Standard occurrence generation for all other cases
   RETURN QUERY
   WITH "starts" AS (
