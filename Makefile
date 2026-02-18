@@ -239,6 +239,7 @@ ci-test:
 		tests/test_all_starts.sql \
 		tests/test_array_operations.sql \
 		tests/test_before_after.sql \
+		tests/test_byhour_byminute.sql \
 		tests/test_casts.sql \
 		tests/test_contains_timestamp.sql \
 		tests/test_edge_cases.sql \
