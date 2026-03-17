@@ -251,10 +251,16 @@ ci-test:
 		tests/test_jsonb_interval.sql \
 		tests/test_last.sql \
 		tests/test_multi_rule.sql \
+        tests/test_negative_bymonthday.sql \
 		tests/test_occurrences.sql \
 		tests/test_ordinal_byday.sql \
 		tests/test_parser.sql \
-		tests/test_validation.sql
+		tests/test_validation.sql \
+        tests/test_timezone_api.sql \
+        tests/test_timezone_dst.sql \
+        tests/test_timezone_until_mismatch.sql \
+		tests/test_validation.sql \
+        tests/test_whitespace_parsing.sql
 
 # ============================================================================
 # Release Management Targets
